@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "deploy": "npm run build && powershell -Command \"Set-Location dist; git init; git checkout -B gh-pages; git add -A; git commit -m 'deploy: update live site'; git remote add origin https://github.com/vfxkaotaku/sahyog-ai.git; git push -f origin gh-pages; Remove-Item -Recurse -Force .git; Set-Location ..\"",
     "lint": "eslint ."
   },
   "dependencies": {
