@@ -25,6 +25,8 @@ function requiresCamera(query: string): boolean {
 
 // ─── Category matcher ─────────────────────────────────────────────────────────
 type Category =
+  | 'greeting'
+  | 'allSchemes'
   | 'cropInsurance'
   | 'cooperative'
   | 'financial'
@@ -37,10 +39,18 @@ type Category =
   | 'general';
 
 function matchCategory(query: string): Category {
-  const q = query.toLowerCase();
+  const q = query.toLowerCase().trim();
 
-  if (/pmfby|fasal bima|crop insurance|pik vima|पिक विमा|फसल बीमा/.test(q)) return 'cropInsurance';
-  if (/pm.?kisan|kisan samman|किसान सम्मान|किसान निधि|pm किसान/.test(q)) return 'pmkisan';
+  // 1. Greetings & Personal Intro
+  if (/^(hi|hello|hey|namaste|namaskar|good morning|good afternoon|good evening|who are you|kya kar sakte ho|rishi|help|help me|start|kaise ho|नमस्ते|नमस्कार|कोण आहेस|काय करू शकतोस|सुरुवात|kya hai)/i.test(q)) return 'greeting';
+  if (/who (made|created) you|what is sahyog|about sahyog|tell me about yourself|introduction|intro|परिचय|सहयोग क्या है/i.test(q)) return 'greeting';
+
+  // 2. All Schemes Directory
+  if (/all schemes|sab yojana|list of schemes|kya yojana|available schemes|all government schemes|yojana list|योजना सूची|सर्व योजना|काय योजना/i.test(q)) return 'allSchemes';
+
+  // 3. Domain Schemes
+  if (/pmfby|fasal bima|crop insurance|pik vima|पिक विमा|फसल बीमा|insurance/.test(q)) return 'cropInsurance';
+  if (/pm.?kisan|kisan samman|किसान सम्मान|किसान निधि|pm किसान|₹6,?000/.test(q)) return 'pmkisan';
   if (/kcc|kisan credit|kisan card|किसान क्रेडिट|किसान कार्ड|शेतकरी पतपत्र/.test(q)) return 'kcc';
   if (/pacs|primary agri|प्राथमिक कृषि|प्राथमिक शेती|पैक्स/.test(q)) return 'pacs';
   if (/cooperative|sahakari|सहकारी|सहकार|bylaw|bye.?law|नियम|अधिनियम/.test(q)) return 'cooperative';
@@ -48,6 +58,10 @@ function matchCategory(query: string): Category {
   if (/financial|literacy|interest|loan|ब्याज|व्याज|loan|कर्ज|ऋण|बचत|saving/.test(q)) return 'financial';
   if (/grievance|complaint|shikayat|तक्रार|शिकायत/.test(q)) return 'grievance';
   if (/document|form|7\/12|satbara|सातबारा|aadhaar|आधार|ration|राशन/.test(q)) return 'document';
+
+  // Broad keywords
+  if (/kisan|farmer|शेती|किसान|कृषि|शेतीमाल/.test(q)) return 'pmkisan';
+  if (/yojana|योजना|scheme/.test(q)) return 'allSchemes';
 
   return 'general';
 }
@@ -694,52 +708,165 @@ I can help you understand common government documents used in rural Maharashtra.
     },
   },
 
-  general: {
+  greeting: {
     en: {
-      content: `I could not find verified information for this question in the current government knowledge base. Please verify with the relevant government authority.
+      content: `👋 **Namaste! I am SAHYOG AI** — your AI Assistant for Rural Welfare, Farmer Subsidies, and Cooperative Legal Guidance.
 
-You can ask me about:
-• 🌾 Crop Insurance (PMFBY)
-• 💳 Kisan Credit Card (KCC)
-• 🧑‍🌾 PM-KISAN Scheme
-• 🏦 PACS & Cooperative Societies
-• ⚖️ Cooperative Laws & Bylaws
-• 💰 Financial Literacy
-• 📢 Grievance Filing
-• 📄 Government Documents (7/12, 8-A)`,
-      suggestions: ['PMFBY crop insurance?', 'Cooperative society rules?', 'PM-KISAN scheme?'],
-      sources: [],
+I am connected to your local kiosk hardware and central knowledge base. Here is what I can assist you with:
+• 🌾 **Farmer Subsidies & Schemes:** PM-KISAN (₹6,000/yr), PMFBY Crop Insurance, PM-KUSUM Solar Pumps
+• 💳 **Credit & Loans:** Kisan Credit Card (KCC @ 4% interest), PACS Membership, Mudra Loans
+• 🚜 **Machinery Subsidy:** 50% subsidy on Tractors & Farm Implements
+• 🏠 **Housing & Pensions:** PM Awaas Yojana Gramin (₹1.20 Lakh), Senior Citizen Pensions
+• ⚖️ **Cooperative Law:** Bylaws, member voting rights, dispute resolution
+• 📄 **Document Reader:** Use the Camera Simulator to read circulars, notices, or land records (7/12)
+
+💬 *What would you like to explore today?*`,
+      suggestions: ['Tell me all schemes', 'What is PM-KISAN?', 'Crop Insurance PMFBY', 'Kisan Credit Card (KCC)'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc],
       canPrint: false,
     },
     hi: {
-      content: `मुझे इस प्रश्न के लिए वर्तमान सरकारी ज्ञानकोष में सत्यापित जानकारी नहीं मिली। कृपया संबंधित सरकारी प्राधिकरण से सत्यापित करें।
+      content: `👋 **नमस्ते! मैं सहयोग AI (SAHYOG AI) हूँ** — ग्रामीण कल्याण, किसान योजनाओं और सहकारी कानूनी सहायता हेतु आपकी समर्पित डिजिटल सहायक।
 
-आप मुझसे पूछ सकते हैं:
-• 🌾 फसल बीमा (PMFBY)
-• 💳 किसान क्रेडिट कार्ड
-• 🧑‍🌾 PM-KISAN
-• 🏦 PACS और सहकारी
-• ⚖️ सहकारी कानून
-• 💰 वित्तीय साक्षरता
-• 📢 शिकायत`,
-      suggestions: ['PMFBY फसल बीमा?', 'सहकारी नियम?', 'PM-KISAN?'],
-      sources: [],
+मैं आपके हार्डवेयर कियोस्क और केंद्रीय डेटाबेस से जुड़ी हुई हूँ। मैं इन प्रमुख विषयों पर आपकी पूरी सहायता कर सकती हूँ:
+• 🌾 **किसान योजनाएं व अनुदान:** पीएम किसान सम्मान निधि (₹6,000/वर्ष), पीएम फसल बीमा (PMFBY), कुसुम सोलर पंप (90% सब्सिडी)
+• 💳 **ऋण एवं क्रेडिट कार्ड:** किसान क्रेडिट कार्ड (KCC मात्र 4% ब्याज), पैक्स (PACS) सदस्यता
+• 🚜 **कृषि यंत्र अनुदान:** ट्रैक्टर व रोटावेटर पर 50% तक सरकारी सब्सिडी
+• 🏠 **आवास व पेंशन:** पीएम आवास योजना ग्रामीण (₹1.20 लाख), वृद्धावस्था पेंशन
+• ⚖️ **सहकारी अधिकार:** समिति उपनियम, चुनाव व लाभांश अधिकार, विवाद निवारण
+• 📄 **दस्तावेज़ वाचन:** सरकारी नोटिस, आदेश या 7/12 सातबारा कैमरा से स्कैन करवाएं
+
+💬 *ऋषि जी, आज मैं आपकी क्या सहायता करूँ?*`,
+      suggestions: ['सभी सरकारी योजनाएं बताएं', 'PM-KISAN क्या है?', 'फसल बीमा PMFBY विवरण', 'किसान क्रेडिट कार्ड KCC'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc],
       canPrint: false,
     },
     mr: {
-      content: `मला या प्रश्नासाठी सध्याच्या शासकीय ज्ञानकोषात सत्यापित माहिती आढळली नाही. कृपया संबंधित शासकीय प्राधिकरणाकडे सत्यापित करा.
+      content: `👋 **नमस्कार! मी सहयोग AI (SAHYOG AI) आहे** — ग्रामीण विकास, शेतकरी योजना व सहकार कायदेशीर मार्गदर्शनासाठी आपली डिजिटल सहाय्यक.
 
-तुम्ही मला विचारू शकता:
-• 🌾 पिक विमा (PMFBY)
-• 💳 किसान क्रेडिट कार्ड
-• 🧑‍🌾 PM-KISAN
-• 🏦 PACS व सहकारी
-• ⚖️ सहकारी कायदा
-• 💰 आर्थिक साक्षरता
-• 📢 तक्रार`,
-      suggestions: ['PMFBY पिक विमा?', 'सहकारी नियम?', 'PM-KISAN?'],
-      sources: [],
+मी आपल्या हार्डवेअर कियोस्क आणि मध्यवर्ती ज्ञानकोषाशी थेट जोडलेली आहे. मी खालील विषयांवर आपल्याला संपूर्ण मार्गदर्शन करू शकते:
+• 🌾 **शेतकरी योजना व अनुदान:** पीएम-किसान (₹६,०००/वर्ष), प्रधानमंत्री पीक विमा (PMFBY), सौर कृषी पंप (कुसुम)
+• 💳 **पत व कर्ज सहाय्य:** किसान क्रेडिट कार्ड (KCC अवघ्या ४% व्याजाने), पैक्स (PACS) सभासदत्व
+• 🚜 **यंत्रसामग्री सबसिडी:** ट्रॅक्टर व अवजारांवर ५०% पर्यंत अनुदान
+• 🏠 **घरकुल व पेन्शन:** पीएम आवास योजना ग्रामीण (₹१.२० लाख), ज्येष्ठ नागरिक पेन्शन
+• ⚖️ **सहकार हक्क व कायदे:** संस्था उपविधी, निवडणुका, नफा वाटप व वाद निवारण
+• 📄 **कागदपत्र वाचन:** शासकीय जीआर किंवा ७/१२ सातबारा उतारा कॅमेऱ्याने स्कॅन करा
+
+💬 *आपल्याला कोणत्या योजनेबद्दल माहिती हवी आहे?*`,
+      suggestions: ['सर्व शासकीय योजनांची यादी', 'पीएम-किसान योजना काय आहे?', 'पीक विमा माहिती', 'किसान क्रेडिट कार्ड KCC'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc],
       canPrint: false,
+    },
+  },
+
+  allSchemes: {
+    en: {
+      content: `📋 **SAHYOG AI — Directory of All 10 Verified Government Schemes:**
+
+1. 🚜 **Farm Equipment Subsidy (SMAM):** 50% subsidy on tractors, tillers, rotavators (mahadbt.maharashtra.gov.in)
+2. 🌾 **Crop Insurance (PMFBY):** Comprehensive protection against drought, flood, pests (pmfby.gov.in)
+3. ☀️ **PM-KUSUM Solar Pump:** Up to 90% subsidy on solar water pumps for off-grid irrigation (kusum.mahadiscom.in)
+4. 🏠 **PM Awaas Yojana Gramin:** ₹1.20 Lakh direct financial assistance for pucca housing (pmayg.nic.in)
+5. 🎓 **Higher Education Scholarship:** 100% tuition reimbursement for rural and farming families (mahadbt.maharashtra.gov.in)
+6. 👩 **Women SHG Micro-Enterprise (NRLM):** ₹1.5 Lakh low-interest bank loans for self-help groups (aajeevika.gov.in)
+7. 👴 **Senior Citizen Pension (NSAP):** Monthly pension of ₹1,500 for elderly rural citizens (nsap.nic.in)
+8. 🏦 **PACS Cooperative Revitalization:** Modernized Primary Agricultural Credit Societies for fertilizers & seeds
+9. 💼 **Mudra & PMEGP Small Business Loan:** Collateral-free loans up to ₹10 Lakh with 35% margin subsidy (kviconline.gov.in)
+10. 👷 **MGNREGA Rural Employment:** 100 days guaranteed wage employment per financial year (nrega.nic.in)
+
+💡 *Click any suggestion chip below or ask for eligibility, required documents, and application steps!*`,
+      suggestions: ['PM-KISAN details', 'Solar Pump Kusum', 'Farm Equipment Subsidy', 'KCC Crop Loan'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc, SOURCES.maharashtra],
+      canPrint: true,
+    },
+    hi: {
+      content: `📋 **सहयोग AI — सभी 10 सत्यापित सरकारी योजनाओं की संपूर्ण सूची:**
+
+1. 🚜 **कृषि यंत्र अनुदान (SMAM / महाडीबीटी):** ट्रैक्टर, रोटावेटर और कृषि औजारों पर 50% तक सरकारी अनुदान
+2. 🌾 **प्रधानमंत्री फसल बीमा (PMFBY):** सूखा, बाढ़ व ओलावृष्टि से फसल सुरक्षा, केवल 2% प्रीमियम
+3. ☀️ **पीएम कुसुम सोलर पंप:** किसानों को सिंचाई हेतु 90% तक सरकारी सब्सिडी (kusum.mahadiscom.in)
+4. 🏠 **प्रधानमंत्री आवास योजना ग्रामीण:** पक्के मकान निर्माण हेतु ₹1.20 लाख की सीधी सहायता
+5. 🎓 **उच्च शिक्षा व छात्रवृत्ति योजना:** ग्रामीण व किसान परिवारों के बच्चों हेतु 100% फीस प्रतिपूर्ति
+6. 👩 **महिला स्वयं सहायता समूह (NRLM):** लखपति दीदी पहल के तहत ₹1.5 लाख तक कम ब्याज ऋण
+7. 👴 **वरिष्ठ नागरिक पेंशन (NSAP):** 60 वर्ष से अधिक आयु के बुजुर्गों को ₹1,500 मासिक पेंशन
+8. 🏦 **पैक्स (PACS) सहकारी पुनरुद्धार:** सस्ती खाद, बीज और कृषि सेवा केंद्र की सीधी सुविधा
+9. 💼 **मुद्रा व PMEGP लघु उद्योग ऋण:** बिना किसी गारंटी ₹10 लाख तक लोन व 35% सरकारी सब्सिडी
+10. 👷 **मनरेगा (MGNREGA) ग्रामीण रोजगार:** प्रत्येक परिवार को प्रतिवर्ष 100 दिन का पक्का गारंटीकृत रोजगार
+
+💡 *किसी भी योजना का नाम लिखें, मैं पात्रता, आवश्यक दस्तावेज़ और आवेदन करने का लिंक तुरंत बताऊँगी!*`,
+      suggestions: ['PM-KISAN विवरण', 'सोलर पंप कुसुम योजना', 'ट्रैक्टर सब्सिडी योजना', 'किसान क्रेडिट कार्ड KCC'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc, SOURCES.maharashtra],
+      canPrint: true,
+    },
+    mr: {
+      content: `📋 **सहयोग AI — सर्व १० अधिकृत शासकीय योजनांची संपूर्ण यादी:**
+
+1. 🚜 **कृषी यांत्रिकीकरण योजना (महाडीबीटी):** ट्रॅक्टर, रोटाव्हेटर व अवजारांवर ५०% थेट अनुदान
+2. 🌾 **प्रधानमंत्री पीक विमा योजना (PMFBY):** दुष्काळ, महापूर व कीडरोग नुकसानीपासून संपूर्ण विमा संरक्षण
+3. ☀️ **कुसुम सौर कृषी पंप योजना:** शेतकऱ्यांना सिंचनासाठी ९०% पर्यंत शासकीय सबसिडी
+4. 🏠 **प्रधानमंत्री आवास घरकुल योजना:** ग्रामीण पक्के घर बांधकामासाठी ₹१.२० लाख थेट अनुदान
+5. 🎓 **उच्च शिक्षण शिष्यवृत्ती:** शेतकरी व ग्रामीण विद्यार्थ्यांसाठी १००% शिक्षण शुल्क प्रतिपूर्ती
+6. 👩 **महिला बचत गट योजना (NRLM):** महिला सक्षमीकरणासाठी ₹१.५ लाखांपर्यंत कमी व्याजाचे कर्ज
+7. 👴 **ज्येष्ठ नागरिक पेन्शन (श्रावणबाळ / NSAP):** ६० वर्षांवरील ज्येष्ठांना दरमहा ₹१,५०० निवृत्तीवेतन
+8. 🏦 **पैक्स (PACS) सहकार बळकटीकरण:** खते, बियाणे व वाजवी दरात कृषी पतपुरवठा
+9. 💼 **मुद्रा व PMEGP व्यवसाय कर्ज:** विनातारण ₹१० लाखांपर्यंत कर्ज व ३५% शासकीय अनुदान
+10. 👷 **मनरेगा (MGNREGA) रोजगार हमी:** ग्रामीण कुटुंबांना वर्षातून १०० दिवसांचा हक्काचा रोजगार
+
+💡 *खालील पर्यायावर क्लिक करा किंवा कोणत्याही योजनेची सविस्तर माहिती विचारा!*`,
+      suggestions: ['पीएम-किसान माहिती', 'सोलर पंप योजना', 'ट्रॅक्टर सबसिडी योजना', 'किसान क्रेडिट कार्ड KCC'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc, SOURCES.maharashtra],
+      canPrint: true,
+    },
+  },
+
+  general: {
+    en: {
+      content: `💡 **I am SAHYOG AI — your Rural & Cooperative Assistance Guide.**
+
+Here are the top government schemes and legal services you can access right now:
+• 🌾 **PM-KISAN:** Direct ₹6,000/year income support for landholding farmers
+• 🛡️ **PMFBY Crop Insurance:** Financial protection against drought, flood, and pests
+• ☀️ **PM-KUSUM Solar Pump:** Up to 90% government subsidy on solar irrigation
+• 💳 **Kisan Credit Card (KCC):** Up to ₹3 Lakh crop loan at only 4% interest
+• 🚜 **Farm Equipment Subsidy:** 50% subsidy on tractors and agricultural implements
+• 📄 **7/12 Satbara & Documents:** Guidance on land records and certificate applications
+
+*Tap any suggestion below or type your question!*`,
+      suggestions: ['Tell me all schemes', 'PMFBY crop insurance?', 'PM-KISAN scheme?', 'Kisan Credit Card KCC'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc],
+      canPrint: true,
+    },
+    hi: {
+      content: `💡 **मैं सहयोग AI (SAHYOG AI) हूँ — आपकी ग्रामीण व सहकारी सहायता मार्गदर्शिका।**
+
+यहाँ किसानों और ग्रामीणों के लिए सबसे अधिक लाभकारी सरकारी योजनाएं उपलब्ध हैं:
+• 🌾 **पीएम किसान (PM-KISAN):** सभी पात्र किसानों को ₹6,000 वार्षिक सीधी सहायता
+• 🛡️ **प्रधानमंत्री फसल बीमा (PMFBY):** सूखा, बाढ़ व ओलावृष्टि से फसल सुरक्षा
+• ☀️ **कुसुम सोलर पंप योजना:** सिंचाई हेतु 90% तक सरकारी अनुदान
+• 💳 **किसान क्रेडिट कार्ड (KCC):** ₹3 लाख तक का कृषि ऋण मात्र 4% ब्याज पर
+• 🚜 **कृषि यंत्र अनुदान:** ट्रैक्टर व रोटावेटर पर 50% तक सरकारी सब्सिडी
+• 📄 **7/12 सातबारा व दस्तावेज़:** भूलेख व सरकारी प्रमाणपत्र सहायता
+
+*नीचे दिए गए सुझाव पर क्लिक करें या अपना प्रश्न पूछें!*`,
+      suggestions: ['सभी सरकारी योजनाएं बताएं', 'PM-KISAN क्या है?', 'फसल बीमा PMFBY', 'किसान क्रेडिट कार्ड KCC'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc],
+      canPrint: true,
+    },
+    mr: {
+      content: `💡 **मी सहयोग AI (SAHYOG AI) आहे — आपली ग्रामीण व सहकार मार्गदर्शक.**
+
+येथे शेतकरी व ग्रामीण बांधवांसाठी सर्वात महत्त्वाच्या शासकीय योजना उपलब्ध आहेत:
+• 🌾 **पीएम-किसान (PM-KISAN):** पात्र शेतकऱ्यांना ₹६,००० वार्षिक थेट आर्थिक सहाय्य
+• 🛡️ **प्रधानमंत्री पीक विमा (PMFBY):** दुष्काळ व अतिवृष्टीपासून पिकांचे संरक्षण
+• ☀️ **कुसुम सोलर कृषी पंप:** सिंचनासाठी ९०% पर्यंत शासकीय सबसिडी
+• 💳 **किसान क्रेडिट कार्ड (KCC):** ₹३ लाखांपर्यंतचे पीक कर्ज अवघ्या ४% व्याजाने
+• 🚜 **कृषी अवजारे अनुदान:** ट्रॅक्टर व यंत्रांवर ५०% पर्यंत सबसिडी
+• 📄 **७/१२ सातबारा व कागदपत्रे:** महसूल व शासकीय दाखले मार्गदर्शन
+
+*खालील पर्यायावर क्लिक करा किंवा आपला प्रश्न विचारा!*`,
+      suggestions: ['सर्व शासकीय योजनांची यादी', 'पीएम-किसान योजना काय आहे?', 'पीक विमा माहिती', 'किसान क्रेडिट कार्ड KCC'],
+      sources: [SOURCES.pmkisan, SOURCES.pmfby, SOURCES.kcc],
+      canPrint: true,
     },
   },
 };

@@ -69,6 +69,7 @@ void changeState(DeviceState newState) {
 
     case STATE_SPEAKING:
       wakeMgr.setStatusLed(true);
+      audioMgr.playVoiceSpeech();
       break;
 
     case STATE_ERROR:
@@ -227,15 +228,8 @@ void loop() {
         break;
       }
 
-      // Play acoustic output through PAM8403 DAC
-      static uint32_t lastToneStep = 0;
-      if (now - lastToneStep > 500) {
-        lastToneStep = now;
-        audioMgr.playTone(550 + (random(0, 4) * 110), 120);
-      }
-
       // Return to IDLE after speech output completes — stays strictly in IDLE!
-      if (now - stateEntryTime > 3500) {
+      if (now - stateEntryTime > 3800) {
         changeState(STATE_IDLE);
       }
       break;

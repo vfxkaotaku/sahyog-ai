@@ -3,11 +3,12 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Bot, User, Camera, Printer } from 'lucide-react';
+import { Bot, User, Camera, Printer, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SourceBadge from './SourceBadge';
 import type { ChatMessage, Language } from '../../types';
 import { useChatStore, getStrings } from '../../state/chatStore';
+import { speakText } from '../../services/ttsService';
 
 // ─── Markdown-lite renderer ───────────────────────────────────────────────────
 function renderMarkdown(text: string): React.ReactNode {
@@ -149,6 +150,19 @@ function Message({ msg, onOpenCamera, onPrint, language }: MessageProps) {
           )}
         </div>
         <div className="flex items-center gap-2 pl-1">
+          {!msg.isThinking && (
+            <>
+              <button
+                onClick={() => speakText(msg.text, msg.language)}
+                className="flex items-center gap-1 text-[11px] text-slate-400 hover:text-emerald-400 transition-colors active:scale-95"
+                title="Listen to this message"
+              >
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Listen</span>
+              </button>
+              <span className="text-slate-700">•</span>
+            </>
+          )}
           <span className="text-[10px] text-slate-600">{time}</span>
           <span className="text-[9px] text-emerald-400 font-mono font-bold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">BOT-001</span>
           {msg.isDemo && (

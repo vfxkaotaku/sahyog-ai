@@ -16,7 +16,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import {
   Menu, Mic, MicOff, Send, Camera, RefreshCw, Globe,
-  Leaf, Zap, Printer, Building2, Wifi
+  Leaf, Zap, Printer, Building2, Wifi, Volume2, VolumeX
 } from 'lucide-react';
 import RobotAvatar from '../components/avatar/RobotAvatar';
 import MessageFeed from '../components/chat/MessageFeed';
@@ -25,6 +25,7 @@ import Sidebar from '../components/layout/Sidebar';
 import { useChatStore, getStrings } from '../state/chatStore';
 import { sendMessage } from '../services/aiService';
 import { publishHardwareCommand } from '../services/mqttService';
+import { speakText, stopSpeaking } from '../services/ttsService';
 import type { Language } from '../types';
 
 const LANGS: { code: Language; label: string }[] = [
@@ -43,6 +44,7 @@ export default function ChatbotPage() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputText, setInputText] = useState('');
+  const [voiceAudioEnabled, setVoiceAudioEnabled] = useState(true);
   const [isListening, setIsListening] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const strings = getStrings(language);
@@ -147,6 +149,11 @@ export default function ChatbotPage() {
         requiresCamera: response.requiresCamera,
         canPrint: response.canPrint,
       });
+
+      // Speak response aloud with browser native TTS
+      if (voiceAudioEnabled) {
+        speakText(response.answer, language);
+      }
 
       // Camera state if needed
       if (response.requiresCamera) {
@@ -316,9 +323,30 @@ export default function ChatbotPage() {
               ))}
             </div>
 
+            {/* Voice Audio Toggle */}
+            <button
+              onClick={() => {
+                const next = !voiceAudioEnabled;
+                setVoiceAudioEnabled(next);
+                if (!next) stopSpeaking();
+              }}
+              title={voiceAudioEnabled ? 'Voice output enabled (Click to mute)' : 'Voice output muted (Click to unmute)'}
+              className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-semibold ${
+                voiceAudioEnabled
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'
+                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {voiceAudioEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+              <span className="hidden sm:inline">{voiceAudioEnabled ? 'Voice' : 'Mute'}</span>
+            </button>
+
             {/* New chat */}
             <button
-              onClick={() => handleLangChange(language)}
+              onClick={() => {
+                stopSpeaking();
+                handleLangChange(language);
+              }}
               title="New conversation"
               className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
             >
