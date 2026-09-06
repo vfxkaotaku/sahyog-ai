@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="SAHYOG AI is an intelligent multilingual assistant for Indian agriculture, PM-KISAN, PMFBY crop insurance, PACS cooperative regulations, and farmer welfare.">
+  <meta name="theme-color" content="#0a0e17">
+  <title>SAHYOG AI — Agriculture & Cooperative Assistant</title>
+
+  <!-- Google Fonts: Inter & Noto Sans Devanagari -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Main Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Application Shell -->
+  <div class="app-layout" id="appLayout">
+    <!-- Sidebar Root (Rendered via JS) -->
+    <div id="sidebar-root"></div>
+
+    <!-- Main Content Area -->
+    <div class="main-content" id="mainContent">
+      <!-- Chat View (Default Active) -->
+      <section id="view-chat" class="view-section view--active" aria-label="Chat Interface"></section>
+
+      <!-- Government Schemes View -->
+      <section id="view-schemes" class="view-section" hidden aria-label="Government Schemes Directory"></section>
+
+      <!-- Cooperative View -->
+      <section id="view-cooperative" class="view-section" hidden aria-label="Cooperative Guidelines"></section>
+
+      <!-- Knowledge Hub View -->
+      <section id="view-knowledge" class="view-section" hidden aria-label="Knowledge Hub"></section>
+
+      <!-- Settings View -->
+      <section id="view-settings" class="view-section" hidden aria-label="System Settings"></section>
+    </div>
+  </div>
+
+  <!-- JavaScript Dependency Bundle (Order Matters) -->
+  <script src="js/utils/storage.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/services/aiService.js"></script>
+  <script src="js/components/message.js"></script>
+  <script src="js/components/quickActions.js"></script>
+  <script src="js/components/sidebar.js"></script>
+  <script src="js/components/chat.js"></script>
+  <script src="js/app.js"></script>
+
+</body>
+</html>
