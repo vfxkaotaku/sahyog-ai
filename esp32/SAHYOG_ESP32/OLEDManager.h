@@ -24,15 +24,47 @@ public:
 
   bool begin() {
     Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
-    if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_I2C_ADDR)) {
-      Serial.println("[OLED] Warning: SSD1306 allocation failed or display not connected.");
-      isInitialized = false;
-      return false;
+    delay(100); // Allow SSD1306 charge pump power to stabilize
+
+    Serial.println("\n[OLED] Scanning I2C bus on SDA=" + String(OLED_SDA_PIN) + ", SCL=" + String(OLED_SCL_PIN) + "...");
+    uint8_t foundAddr = 0;
+    for (uint8_t addr = 1; addr < 127; addr++) {
+      Wire.beginTransmission(addr);
+      if (Wire.endTransmission() == 0) {
+        Serial.printf("[I2C] Device detected at address 0x%02X\n", addr);
+        if (addr == 0x3C || addr == 0x3D) {
+          foundAddr = addr;
+        }
+      }
     }
+
+    if (foundAddr == 0) {
+      Serial.println("[OLED] WARNING: No I2C display detected on bus!");
+      Serial.println("  --> Check wiring:");
+      Serial.println("      OLED GND  --> ESP32 GND");
+      Serial.println("      OLED VCC  --> ESP32 3.3V or 5V (VIN)");
+      Serial.println("      OLED SCL  --> ESP32 GPIO 22");
+      Serial.println("      OLED SDA  --> ESP32 GPIO 21");
+      foundAddr = OLED_I2C_ADDR; // Default to 0x3C
+    }
+
+    // Attempt initialization on detected address
+    if (!display.begin(SSD1306_SWITCHCAPVCC, foundAddr)) {
+      Serial.printf("[OLED] Init failed at 0x%02X, trying alternate address...\n", foundAddr);
+      uint8_t altAddr = (foundAddr == 0x3C) ? 0x3D : 0x3C;
+      if (!display.begin(SSD1306_SWITCHCAPVCC, altAddr)) {
+        Serial.println("[OLED] FATAL: Could not initialize SSD1306 display.");
+        isInitialized = false;
+        return false;
+      }
+      foundAddr = altAddr;
+    }
+
     isInitialized = true;
+    Serial.printf("[OLED] SSD1306 Display ACTIVE at 0x%02X (128x64)!\n\n", foundAddr);
     display.clearDisplay();
     display.setTextColor(SSD1306_WHITE);
-    display.setTextSize(1);
+    display.dim(false); // Ensure maximum brightness
     showBootScreen();
     return true;
   }
