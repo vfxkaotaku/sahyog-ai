@@ -33,6 +33,7 @@ MQTTManager  mqttMgr;
 DeviceState currentState = STATE_IDLE;
 uint32_t stateEntryTime = 0;
 String activeClip = "ANSWER";
+String activeStreamUrl = "";
 
 void changeState(DeviceState newState) {
   if (currentState == newState) return;
@@ -49,6 +50,7 @@ void changeState(DeviceState newState) {
     case STATE_IDLE:
       wakeMgr.setStatusLed(false);
       micMgr.stopRecording();
+      activeStreamUrl = "";
       break;
 
     case STATE_WAKE:
@@ -70,8 +72,18 @@ void changeState(DeviceState newState) {
 
     case STATE_SPEAKING:
       wakeMgr.setStatusLed(true);
-      // Play scheme voice directly through the ESP32 PAM8403 physical speaker!
-      audioMgr.playClip(activeClip);
+      // Priority 1: Stream live dynamic AI speech over WiFi directly to DAC GPIO 25!
+      if (activeStreamUrl.length() > 0) {
+        Serial.printf("[State] Streaming live dynamic AI voice from backend...\n");
+        bool ok = audioMgr.streamHttpAudio(activeStreamUrl.c_str());
+        if (!ok) {
+          Serial.println("[State] Stream fallback -> playing embedded voice clip");
+          audioMgr.playClip(activeClip);
+        }
+      } else {
+        // Priority 2: Play embedded scheme voice clip from Flash
+        audioMgr.playClip(activeClip);
+      }
       break;
 
     case STATE_ERROR:
@@ -92,8 +104,9 @@ void handleCommand(const char* topic, const char* payload) {
   String titleStr = "SAHYOG AI";
   String textStr = "";
   String clipStr = "ANSWER";
+  String streamUrl = "";
 
-  // Check if JSON payload (e.g. {"command":"SPEAK","clip":"PM_KISAN","title":"...","text":"..."})
+  // Check if JSON payload (e.g. {"command":"SPEAK","clip":"PM_KISAN","title":"...","text":"...","url":"..."})
   if (p.startsWith("{")) {
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, p);
@@ -102,6 +115,7 @@ void handleCommand(const char* topic, const char* payload) {
       if (doc["clip"].is<const char*>())    clipStr = String(doc["clip"].as<const char*>());
       if (doc["title"].is<const char*>())   titleStr = String(doc["title"].as<const char*>());
       if (doc["text"].is<const char*>())    textStr = String(doc["text"].as<const char*>());
+      if (doc["url"].is<const char*>())     streamUrl = String(doc["url"].as<const char*>());
     }
   }
 
@@ -111,6 +125,7 @@ void handleCommand(const char* topic, const char* payload) {
     changeState(STATE_WAKE);
   } else if (cmdStr.indexOf("SPEAK") >= 0) {
     activeClip = clipStr;
+    activeStreamUrl = streamUrl;
     if (textStr.length() > 0 || titleStr.length() > 0) {
       oledMgr.setAnswerContent(titleStr.c_str(), textStr.c_str());
     }
@@ -121,6 +136,7 @@ void handleCommand(const char* topic, const char* payload) {
     changeState(STATE_LISTENING);
   } else if (cmdStr.indexOf("IDLE") >= 0) {
     activeClip = "ANSWER";
+    activeStreamUrl = "";
     oledMgr.clearAnswerContent();
     changeState(STATE_IDLE);
   } else if (p.indexOf("vol+") >= 0) {

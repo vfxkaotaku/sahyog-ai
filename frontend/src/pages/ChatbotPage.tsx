@@ -150,11 +150,18 @@ export default function ChatbotPage() {
         clip = 'KCC';
       }
 
+      // Dynamic Live AI Speech streaming URL over local WiFi
+      const serverHost = window.location.hostname === 'localhost' ? 'localhost' : '10.111.125.210';
+      const encodedText = encodeURIComponent(cleanSummary.substring(0, 160));
+      const ttsStreamUrl = `http://${serverHost}:3001/api/tts/pcm?lang=${language}&text=${encodedText}`;
+
       // Route speech directly to physical ESP32 PAM8403 hardware speaker!
       publishHardwareCommand('BOT-001', 'SPEAK', {
         clip,
         title: schemeTitle,
         text: cleanSummary,
+        url: ttsStreamUrl,
+        lang: language,
       });
 
       setTimeout(() => {

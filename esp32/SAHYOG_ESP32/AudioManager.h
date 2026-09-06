@@ -10,6 +10,8 @@
 #define SAHYOG_AUDIO_MANAGER_H
 
 #include <Arduino.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
 #include "Config.h"
 #include "audio_data.h"
 
@@ -194,6 +196,58 @@ public:
       delay(40);
       playBuffer(audio_answer, ANSWER_SAMPLE_COUNT, AUDIO_SAMPLE_RATE);
     }
+  }
+
+  // Stream live dynamic TTS PCM audio over WiFi directly to DAC GPIO 25!
+  bool streamHttpAudio(const char* url) {
+    if (WiFi.status() != WL_CONNECTED || !url || strlen(url) < 7) {
+      return false;
+    }
+
+    Serial.printf("[Audio Stream] Fetching dynamic AI speech from: %s\n", url);
+    HTTPClient http;
+    http.begin(url);
+    http.setTimeout(8000);
+    int httpCode = http.GET();
+
+    if (httpCode != HTTP_CODE_OK) {
+      Serial.printf("[Audio Stream] HTTP GET failed (code %d), falling back to offline voice\n", httpCode);
+      http.end();
+      return false;
+    }
+
+    WiFiClient* stream = http.getStreamPtr();
+    if (!stream) {
+      http.end();
+      return false;
+    }
+
+    uint8_t chunk[256];
+    dacRamp(128, 128, 40);
+    uint64_t nextSampleUs = esp_timer_get_time();
+    const uint32_t sampleIntervalUs = 1000000 / AUDIO_SAMPLE_RATE; // 11025 Hz (~90us)
+
+    while (http.connected() && (stream->available() > 0 || stream->connected())) {
+      int len = stream->readBytes(chunk, sizeof(chunk));
+      if (len <= 0) break;
+
+      for (int i = 0; i < len; i++) {
+        uint8_t raw = chunk[i];
+        int16_t centered = (int16_t)raw - 128;
+        int16_t scaled = 128 + ((centered * volume) / 100);
+        uint8_t out = (uint8_t)constrain(scaled, 0, 255);
+
+        while (esp_timer_get_time() < nextSampleUs) {}
+        dacWrite(AUDIO_DAC_PIN, out);
+        nextSampleUs += sampleIntervalUs;
+      }
+    }
+
+    dacRamp(128, 128, 40);
+    dacWrite(AUDIO_DAC_PIN, 128);
+    http.end();
+    Serial.println("[Audio Stream] Dynamic AI speech finished playing!");
+    return true;
   }
 
   // Backward-compatible alias

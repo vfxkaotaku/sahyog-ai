@@ -17,6 +17,7 @@ import cameraRouter from './api/routes/camera';
 import printerRouter from './api/routes/printer';
 import portalRouter from './api/routes/portal';
 import conversationsRouter from './api/routes/conversations';
+import ttsRouter from './api/routes/tts';
 import { initMqttBridge } from './services/mqtt/mqttBridge';
 import { initDatabase } from './db/database';
 
@@ -51,6 +52,7 @@ app.use('/api/devices', devicesRouter);
 app.use('/api/camera', cameraRouter);
 app.use('/api/printer', printerRouter);
 app.use('/api/conversations', conversationsRouter);
+app.use('/api/tts', ttsRouter);
 
 // Health check
 app.get('/api/health', (_req, res) => {
