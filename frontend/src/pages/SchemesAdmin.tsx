@@ -6,24 +6,26 @@
 import React, { useState, useEffect } from 'react';
 import { ListFilter, Search, Building2, FileText, ExternalLink, Calendar, RefreshCw } from 'lucide-react';
 import type { GovernmentScheme } from '../types';
+import { FALLBACK_SCHEMES } from '../data/fallbackSchemes';
 
 export default function SchemesAdmin() {
-  const [schemes, setSchemes] = useState<GovernmentScheme[]>([]);
+  const [schemes, setSchemes] = useState<GovernmentScheme[]>(FALLBACK_SCHEMES);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const loadSchemes = async () => {
     try {
-      setLoading(true);
-      const res = await fetch('http://localhost:3001/api/portal/schemes');
+      const res = await fetch('http://localhost:3001/api/portal/schemes', {
+        signal: AbortSignal.timeout(2000),
+      });
       if (res.ok) {
         const data = await res.json();
-        setSchemes(data.schemes || []);
+        if (data.schemes && data.schemes.length > 0) {
+          setSchemes(data.schemes);
+        }
       }
-    } catch (err) {
-      console.warn('Could not load schemes:', err);
-    } finally {
-      setLoading(false);
+    } catch {
+      // Keeps FALLBACK_SCHEMES on GitHub Pages or offline
     }
   };
 

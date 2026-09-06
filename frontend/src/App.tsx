@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
+import { createHashRouter, RouterProvider } from 'react-router-dom';
 import ChatbotPage from './pages/ChatbotPage';
 import CameraPage from './pages/CameraPage';
 import PrinterPage from './pages/PrinterPage';
@@ -13,7 +13,7 @@ import ConversationsAdmin from './pages/ConversationsAdmin';
 import LogsAdmin from './pages/LogsAdmin';
 import { connectSocket } from './services/socketService';
 
-const router = createBrowserRouter([
+const router = createHashRouter([
   { path: '/', element: <ChatbotPage /> },
   { path: '/portal', element: <GovPortalPage /> },
   { path: '/camera', element: <CameraPage /> },
