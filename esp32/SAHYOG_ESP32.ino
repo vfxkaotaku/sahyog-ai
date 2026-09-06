@@ -14,6 +14,7 @@
  */
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include "Config.h"
 #include "OLEDManager.h"
 #include "AudioManager.h"
@@ -51,7 +52,7 @@ void changeState(DeviceState newState) {
 
     case STATE_WAKE:
       wakeMgr.setStatusLed(true);
-      audioMgr.playVoiceSpeech(); // Speaks: "Hello Rishi, main hoon aap ki AI agent"
+      audioMgr.playWakeSpeech(); // Speaks greeting: "Hello Rishi, main hoon aap ki AI agent"
       break;
 
     case STATE_LISTENING:
@@ -68,7 +69,7 @@ void changeState(DeviceState newState) {
 
     case STATE_SPEAKING:
       wakeMgr.setStatusLed(true);
-      audioMgr.playVoiceSpeech();
+      audioMgr.playAnswerSpeech(); // Speaks: "Aapka uttar taiyar hai" + prompt chime (never the greeting!)
       break;
 
     case STATE_ERROR:
@@ -85,15 +86,36 @@ void handleCommand(const char* topic, const char* payload) {
   String p = String(payload);
   p.trim();
 
-  if (p.indexOf("WAKE") >= 0 || p.indexOf("wake") >= 0) {
+  String cmdStr = p;
+  String titleStr = "SAHYOG AI";
+  String textStr = "";
+
+  // Check if JSON payload (e.g. {"command":"SPEAK","title":"PM-KISAN","text":"..."})
+  if (p.startsWith("{")) {
+    JsonDocument doc;
+    DeserializationError error = deserializeJson(doc, p);
+    if (!error) {
+      if (doc["command"].is<const char*>()) cmdStr = String(doc["command"].as<const char*>());
+      if (doc["title"].is<const char*>())   titleStr = String(doc["title"].as<const char*>());
+      if (doc["text"].is<const char*>())    textStr = String(doc["text"].as<const char*>());
+    }
+  }
+
+  cmdStr.toUpperCase();
+
+  if (cmdStr.indexOf("WAKE") >= 0) {
     changeState(STATE_WAKE);
-  } else if (p.indexOf("SPEAK") >= 0 || p.indexOf("speak") >= 0) {
+  } else if (cmdStr.indexOf("SPEAK") >= 0) {
+    if (textStr.length() > 0 || titleStr.length() > 0) {
+      oledMgr.setAnswerContent(titleStr.c_str(), textStr.c_str());
+    }
     changeState(STATE_SPEAKING);
-  } else if (p.indexOf("THINKING") >= 0 || p.indexOf("thinking") >= 0) {
+  } else if (cmdStr.indexOf("THINKING") >= 0) {
     changeState(STATE_THINKING);
-  } else if (p.indexOf("LISTEN") >= 0 || p.indexOf("listen") >= 0) {
+  } else if (cmdStr.indexOf("LISTEN") >= 0) {
     changeState(STATE_LISTENING);
-  } else if (p.indexOf("IDLE") >= 0 || p.indexOf("idle") >= 0) {
+  } else if (cmdStr.indexOf("IDLE") >= 0) {
+    oledMgr.clearAnswerContent();
     changeState(STATE_IDLE);
   } else if (p.indexOf("vol+") >= 0) {
     audioMgr.setVolume(audioMgr.getVolume() + 5);
@@ -174,7 +196,8 @@ void loop() {
   // ─── Touch / Button Gesture Action ─────────────────────────────────────────
   if (gesture == GESTURE_TAP) {
     if (currentState == STATE_SPEAKING) {
-      // Tap while speaking: dismisses speech early
+      // Tap while speaking: dismisses speech and answer card early
+      oledMgr.clearAnswerContent();
       changeState(STATE_IDLE);
     } else {
       // Single Tap (< 2s): Wake up the bot!
@@ -248,8 +271,9 @@ void loop() {
       break;
 
     case STATE_SPEAKING:
-      // Speech output finishes after 3.8s -> returns strictly to IDLE!
-      if (now - stateEntryTime > 3800) {
+      // Speech output and answer card display on OLED finishes after 6.0s -> returns strictly to IDLE!
+      if (now - stateEntryTime > 6000) {
+        oledMgr.clearAnswerContent();
         changeState(STATE_IDLE);
       }
       break;

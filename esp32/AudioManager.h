@@ -106,19 +106,21 @@ public:
     playTone(261, 250); // C4
   }
 
-  // Play raw 8-bit unsigned PCM buffer at 16kHz
+  // Play raw 8-bit unsigned PCM buffer from Flash (PROGMEM) at sampleRate
   void playBuffer(const uint8_t* buffer, uint32_t length, uint16_t sampleRate = 16000) {
     if (!buffer || length == 0) return;
 
     // Read first sample and soft ramp
-    int16_t first_centered = (int16_t)buffer[0] - 128;
+    uint8_t first_raw = pgm_read_byte(&(buffer[0]));
+    int16_t first_centered = (int16_t)first_raw - 128;
     uint8_t first_sample = 128 + ((first_centered * volume) / 100);
     dacRamp(128, first_sample, 80);
 
     uint64_t startTimeUs = esp_timer_get_time();
 
     for (uint32_t i = 0; i < length; i++) {
-      int16_t centered = (int16_t)buffer[i] - 128;
+      uint8_t raw = pgm_read_byte(&(buffer[i]));
+      int16_t centered = (int16_t)raw - 128;
       int16_t scaled = 128 + ((centered * volume) / 100);
       uint8_t output = (uint8_t)constrain(scaled, 0, 255);
 
@@ -131,39 +133,40 @@ public:
     }
 
     // Soft ramp back to center silence
-    int16_t last_centered = (int16_t)buffer[length - 1] - 128;
+    uint8_t last_raw = pgm_read_byte(&(buffer[length - 1]));
+    int16_t last_centered = (int16_t)last_raw - 128;
     uint8_t last_sample = 128 + ((last_centered * volume) / 100);
     dacRamp(last_sample, 128, 80);
     dacWrite(AUDIO_DAC_PIN, 128);
   }
 
-  // Play natural recorded speech: "Hello Rishi, main hoon aap ki AI agent"
+  // Play natural recorded wake speech: "Hello Rishi, main hoon aap ki AI agent"
+  void playWakeSpeech() {
+    Serial.printf("[Audio] Playing Wake Greeting (\"Hello Rishi, main hoon aap ki AI agent\")... Samples: %d\n", WAKE_SAMPLE_COUNT);
+    playBuffer(audio_wake, WAKE_SAMPLE_COUNT, AUDIO_SAMPLE_RATE);
+  }
+
+  // Play pleasant 4-tone answer arrival chime
+  void playAnswerChime() {
+    playTone(523, 70);   // C5
+    playTone(659, 70);   // E5
+    playTone(784, 90);   // G5
+    playTone(1046, 140); // C6
+  }
+
+  // Play natural recorded answer speech: "Aapka uttar taiyar hai"
+  void playAnswerSpeech() {
+    Serial.printf("[Audio] Playing Answer Confirmation (\"Aapka uttar taiyar hai\")... Samples: %d\n", ANSWER_SAMPLE_COUNT);
+    // Short alert chime before speech
+    playTone(659, 70);
+    playTone(880, 100);
+    delay(50);
+    playBuffer(audio_answer, ANSWER_SAMPLE_COUNT, AUDIO_SAMPLE_RATE);
+  }
+
+  // Backward-compatible alias
   void playVoiceSpeech() {
-    Serial.printf("[Audio] Playing Voice Speech (\"Hello Rishi, main hoon aap ki AI agent\")... Samples: %d\n", AUDIO_SAMPLE_COUNT);
-    uint8_t first_raw = pgm_read_byte(&(audio_data[0]));
-    int16_t first_centered = (int16_t)first_raw - 128;
-    uint8_t first_sample = 128 + ((first_centered * volume) / 100);
-    dacRamp(128, first_sample, 80);
-
-    uint64_t startTimeUs = esp_timer_get_time();
-
-    for (uint32_t i = 0; i < AUDIO_SAMPLE_COUNT; i++) {
-      uint8_t raw = pgm_read_byte(&(audio_data[i]));
-      int16_t centered = (int16_t)raw - 128;
-      int16_t scaled = 128 + ((centered * volume) / 100);
-      uint8_t output = (uint8_t)constrain(scaled, 0, 255);
-
-      dacWrite(AUDIO_DAC_PIN, output);
-
-      uint64_t targetTimeUs = startTimeUs + ((uint64_t)(i + 1) * 1000000ULL) / AUDIO_SAMPLE_RATE;
-      while (esp_timer_get_time() < targetTimeUs) {
-        // Precise timer anchor
-      }
-    }
-
-    dacRamp(128, 128, 60);
-    dacWrite(AUDIO_DAC_PIN, 128);
-    Serial.println("[Audio] Voice playback finished.");
+    playWakeSpeech();
   }
 };
 

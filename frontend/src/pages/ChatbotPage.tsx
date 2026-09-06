@@ -136,11 +136,16 @@ export default function ChatbotPage() {
 
       // Transition to speaking on both Web Avatar and physical ESP32 Node!
       setAvatarState('SPEAKING');
-      publishHardwareCommand('BOT-001', 'SPEAK');
+      const schemeTitle = response.sources?.[0]?.documentTitle || response.sources?.[0]?.department || (language === 'mr' ? 'सहयोग AI' : language === 'hi' ? 'सहयोग AI' : 'SAHYOG AI');
+      const cleanSummary = response.answer.replace(/[#*`_\[\]()]/g, '').substring(0, 95);
+      publishHardwareCommand('BOT-001', 'SPEAK', {
+        title: schemeTitle,
+        text: cleanSummary,
+      });
       setTimeout(() => {
         setAvatarState('IDLE');
         publishHardwareCommand('BOT-001', 'IDLE');
-      }, 3500);
+      }, 6000);
 
       // Add AI response
       addMessage({

@@ -3,6 +3,11 @@
  *  ESP32 + PAM8403 (HW-104) Audio Player Test - Crystal Clear Voice
  *  Speech: "Hello Rishi, main hoon aap ki AI agent"
  * ==============================================================================
+ *  ⚠️ NOTE FOR USER:
+ *  This sketch is ONLY a standalone audio test for PAM8403 amplifier wiring.
+ *  For the FULL SAHYOG AI Assistant (WiFi + MQTT + OLED + Touch + Web Sync),
+ *  open and flash: esp32/SAHYOG_ESP32/SAHYOG_ESP32.ino !
+ * ==============================================================================
  *
  *  WHY WAS THE VOICE "TEARING"?
  *  -------------------------------------------------------------
@@ -188,9 +193,6 @@ void loop() {
     }
   }
 
-  // Automatic repeat every 5s
-  if (millis() - lastPlayTime >= AUTO_REPEAT_MS) {
-    playAudio();
-    lastPlayTime = millis();
-  }
+  // Note: Auto-repeat loop removed so it doesn't loop endlessly!
+  // To replay, press BOOT button (GPIO 0) or press Spacebar in Serial Monitor.
 }

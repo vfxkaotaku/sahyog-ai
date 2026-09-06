@@ -1,17 +1,21 @@
 """
 generate_audio.py
 =================
-Generates speech for "Hello Rishi, main hoon aap ki AI agent"
-and exports it as:
-  1. audio_data.h  -> C header with PROGMEM byte array (16kHz High Quality)
-  2. data/speech.wav -> Standard 16kHz WAV file
+Generates dual speech phrases for SAHYOG AI ESP32:
+  1. Wake Phrase   : "Hello Rishi, main hoon aap ki AI agent"
+  2. Answer Phrase : "आपका उत्तर तैयार है" (Aapka uttar taiyar hai)
 
-Uses gTTS for voice generation and miniaudio for clean resampling.
+Exports:
+  - audio_data.h  -> C header with PROGMEM byte arrays (16kHz High Quality)
+  - data/wake.wav, data/answer.wav -> Standard 16kHz WAV files
+
+Uses gTTS for voice generation and miniaudio for clean 16kHz resampling.
 """
 
 import os
 import sys
 import wave
+import shutil
 
 try:
     from gtts import gTTS
@@ -29,38 +33,22 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "miniaudio"])
     import miniaudio
 
-# ─── Configuration ───────────────────────────────────────────
-TEXT        = "Hello Rishi, main hoon aap ki AI agent"
-LANG        = "hi"          # Hindi
-SAMPLE_RATE = 16000         # 16000 Hz wideband audio (crisp, natural voice)
-TEMP_MP3    = "temp_tts.mp3"
-HEADER_FILE = "audio_data.h"
-WAV_DIR     = "data"
-WAV_FILE    = os.path.join(WAV_DIR, "speech.wav")
+SAMPLE_RATE = 16000
+WAKE_TEXT = "Hello Rishi, main hoon aap ki AI agent"
+ANSWER_TEXT = "आपका उत्तर तैयार है"
+WAV_DIR = "data"
 
-def main():
-    print("=" * 60)
-    print("  ESP32 + PAM8403 High-Quality Audio Generator")
-    print(f"  Phrase     : \"{TEXT}\"")
-    print(f"  Language   : {LANG} (Hindi)")
-    print(f"  Sample Rate: {SAMPLE_RATE} Hz (16 kHz)")
-    print("=" * 60)
+def text_to_pcm(text, lang="hi", temp_name="temp.mp3"):
+    print(f"  Generating TTS for language: {lang}...")
+    tts = gTTS(text=text, lang=lang, slow=False)
+    tts.save(temp_name)
 
-    # 1. Download TTS MP3
-    print("\n[1/4] Generating speech via Google TTS...")
-    tts = gTTS(text=TEXT, lang=LANG, slow=False)
-    tts.save(TEMP_MP3)
-    print(f"      Saved: {TEMP_MP3} ({os.path.getsize(TEMP_MP3)} bytes)")
-
-    # 2. Decode MP3 to 16000 Hz Mono PCM with miniaudio
-    print(f"\n[2/4] Decoding & resampling to {SAMPLE_RATE} Hz Mono...")
-    decoded = miniaudio.decode_file(TEMP_MP3, nchannels=1, sample_rate=SAMPLE_RATE)
+    decoded = miniaudio.decode_file(temp_name, nchannels=1, sample_rate=SAMPLE_RATE)
     samples = decoded.samples
-    num_samples = len(samples)
-    duration = num_samples / float(SAMPLE_RATE)
-    print(f"      Decoded {num_samples} samples (~{duration:.2f} seconds)")
+    if os.path.exists(temp_name):
+        os.remove(temp_name)
 
-    # Normalize to 80% peak to prevent any digital ceiling clipping
+    # Normalize to 80% peak amplitude to avoid clipping
     max_amp = max(abs(s) for s in samples) if samples else 1
     scale = (32767.0 * 0.80) / max_amp if max_amp > 0 else 1.0
 
@@ -72,49 +60,87 @@ def main():
         val = max(0, min(255, val))
         raw_8bit.append(val)
 
-    # 3. Write audio_data.h
-    print(f"\n[3/4] Writing '{HEADER_FILE}' (PROGMEM C header)...")
-    with open(HEADER_FILE, "w", encoding="utf-8") as f:
-        f.write("// ============================================================\n")
-        f.write("//  Auto-generated 16kHz Audio Data Header for ESP32 DAC\n")
-        f.write(f"//  Phrase: \"{TEXT}\"\n")
-        f.write(f"//  Sample Rate: {SAMPLE_RATE} Hz, 8-bit unsigned mono PCM\n")
-        f.write(f"//  Duration: {duration:.2f} seconds, Total bytes: {len(raw_8bit)}\n")
-        f.write("// ============================================================\n\n")
-        f.write("#pragma once\n")
-        f.write("#include <Arduino.h>\n\n")
-        f.write(f"#define AUDIO_SAMPLE_RATE    {SAMPLE_RATE}\n")
-        f.write(f"#define AUDIO_SAMPLE_COUNT   {len(raw_8bit)}\n\n")
-        f.write("const uint8_t audio_data[] PROGMEM = {\n")
-        
-        for i in range(0, len(raw_8bit), 16):
-            chunk = raw_8bit[i:i+16]
-            hex_values = ", ".join(f"0x{b:02X}" for b in chunk)
-            if i + 16 < len(raw_8bit):
-                f.write(f"    {hex_values},\n")
-            else:
-                f.write(f"    {hex_values}\n")
-        f.write("};\n")
-    
-    header_size = os.path.getsize(HEADER_FILE)
-    print(f"      Created '{HEADER_FILE}' ({header_size/1024:.1f} KB)")
+    duration = len(raw_8bit) / float(SAMPLE_RATE)
+    print(f"  -> Generated {len(raw_8bit)} samples ({duration:.2f}s)")
+    return raw_8bit
 
-    # 4. Save data/speech.wav
-    print(f"\n[4/4] Writing standard WAV file '{WAV_FILE}'...")
-    os.makedirs(WAV_DIR, exist_ok=True)
-    with wave.open(WAV_FILE, "wb") as wf:
+def format_hex_array(data, name):
+    lines = [f"const uint8_t {name}[] PROGMEM = {{\n"]
+    for i in range(0, len(data), 16):
+        chunk = data[i:i+16]
+        hex_vals = ", ".join(f"0x{b:02X}" for b in chunk)
+        if i + 16 < len(data):
+            lines.append(f"    {hex_vals},\n")
+        else:
+            lines.append(f"    {hex_vals}\n")
+    lines.append("};\n\n")
+    return "".join(lines)
+
+def main():
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+    print("=" * 60)
+    print("  SAHYOG AI - ESP32 Dual Audio Generator (16 kHz)")
+    print(f"  1. Wake Phrase   : {WAKE_TEXT}")
+    print("  2. Answer Phrase : Aapka uttar taiyar hai (Hindi)")
+    print("=" * 60)
+
+    wake_pcm = text_to_pcm(WAKE_TEXT, "hi", "temp_wake.mp3")
+    answer_pcm = text_to_pcm(ANSWER_TEXT, "hi", "temp_answer.mp3")
+
+    header_content = []
+    header_content.append("// ============================================================\n")
+    header_content.append("//  Auto-generated 16kHz Audio Data Header for SAHYOG AI ESP32\n")
+    header_content.append(f"//  Wake Phrase   : \"{WAKE_TEXT}\"\n")
+    header_content.append(f"//  Answer Phrase : \"{ANSWER_TEXT}\"\n")
+    header_content.append(f"//  Sample Rate   : {SAMPLE_RATE} Hz, 8-bit unsigned mono PCM\n")
+    header_content.append("// ============================================================\n\n")
+    header_content.append("#pragma once\n")
+    header_content.append("#include <Arduino.h>\n\n")
+    header_content.append(f"#define AUDIO_SAMPLE_RATE      {SAMPLE_RATE}\n")
+    header_content.append(f"#define WAKE_SAMPLE_COUNT      {len(wake_pcm)}\n")
+    header_content.append(f"#define ANSWER_SAMPLE_COUNT    {len(answer_pcm)}\n\n")
+    header_content.append(f"// Legacy alias compatibility\n")
+    header_content.append(f"#define AUDIO_SAMPLE_COUNT     WAKE_SAMPLE_COUNT\n\n")
+
+    header_content.append(format_hex_array(wake_pcm, "audio_wake"))
+    header_content.append(format_hex_array(answer_pcm, "audio_answer"))
+    header_content.append("// Legacy pointer alias\n")
+    header_content.append("#define audio_data audio_wake\n")
+
+    full_header = "".join(header_content)
+
+    targets = [
+        os.path.join(".", "audio_data.h"),
+        os.path.join("..", "esp32", "SAHYOG_ESP32", "audio_data.h"),
+        os.path.join("..", "esp32", "audio_data.h")
+    ]
+
+    for t in targets:
+        os.makedirs(os.path.dirname(os.path.abspath(t)), exist_ok=True)
+        with open(t, "w", encoding="utf-8") as f:
+            f.write(full_header)
+        sz = os.path.getsize(t) / 1024.0
+        print(f"  [SAVED] {t} ({sz:.1f} KB)")
+
+    # Save WAV files
+    os.makedirs(WAKE_TEXT and WAV_DIR, exist_ok=True)
+    with wave.open(os.path.join(WAV_DIR, "wake.wav"), "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(1)
         wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(raw_8bit)
-    print(f"      Created '{WAV_FILE}' ({os.path.getsize(WAV_FILE)} bytes)")
+        wf.writeframes(wake_pcm)
 
-    if os.path.exists(TEMP_MP3):
-        os.remove(TEMP_MP3)
+    with wave.open(os.path.join(WAV_DIR, "answer.wav"), "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(1)
+        wf.setframerate(SAMPLE_RATE)
+        wf.writeframes(answer_pcm)
 
     print("\n" + "=" * 60)
-    print("  SUCCESS! 16kHz Audio generated.")
-    print("  Open ESP32_HW104_Audio.ino and click Upload!")
+    print("  SUCCESS! Dual audio generated and synchronized to all targets.")
     print("=" * 60)
 
 if __name__ == "__main__":

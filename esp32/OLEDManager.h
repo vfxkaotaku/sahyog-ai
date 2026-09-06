@@ -31,13 +31,27 @@ private:
   bool isInitialized;
   uint32_t lastAnimTick;
   uint8_t animFrame;
+  String answerTitle;
+  String answerText;
+  uint32_t answerReceivedTime;
 
 public:
 #if USE_SH1106_1_3_INCH
-  OLEDManager() : display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1), isInitialized(false), lastAnimTick(0), animFrame(0) {}
+  OLEDManager() : display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1), isInitialized(false), lastAnimTick(0), animFrame(0), answerReceivedTime(0) {}
 #else
-  OLEDManager() : display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1), isInitialized(false), lastAnimTick(0), animFrame(0) {}
+  OLEDManager() : display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1), isInitialized(false), lastAnimTick(0), animFrame(0), answerReceivedTime(0) {}
 #endif
+
+  void setAnswerContent(const char* title, const char* text) {
+    answerTitle = (title && strlen(title) > 0) ? String(title) : String("SAHYOG AI");
+    answerText = (text && strlen(text) > 0) ? String(text) : String("");
+    answerReceivedTime = millis();
+  }
+
+  void clearAnswerContent() {
+    answerTitle = "";
+    answerText = "";
+  }
 
   bool begin() {
     Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
@@ -331,6 +345,28 @@ private:
   }
 
   void drawSpeakingMouth() {
+    uint32_t elapsed = (answerReceivedTime > 0) ? (millis() - answerReceivedTime) : 0;
+
+    // If answer text is available and initial voice prompt has played (>2.2s):
+    // Display the Answer Card on OLED screen so the user can read the answer!
+    if (answerText.length() > 0 && elapsed > 2200) {
+      display.drawRect(0, 0, 128, 64, COLOR_WHITE);
+      display.setTextSize(1);
+      display.setTextColor(COLOR_WHITE);
+
+      // Header: Scheme / Question Title
+      display.setCursor(4, 4);
+      display.printf("[AI] %.16s", answerTitle.c_str());
+      display.drawLine(0, 14, 128, 14, COLOR_WHITE);
+
+      // Body: Wrapped answer text
+      display.setCursor(4, 18);
+      display.setTextWrap(true);
+      String snippet = answerText.substring(0, 95);
+      display.print(snippet);
+      return;
+    }
+
     // Talking robot face with pulsing mouth
     display.fillRoundRect(30, 14, 24, 16, 4, COLOR_WHITE);
     display.fillRoundRect(74, 14, 24, 16, 4, COLOR_WHITE);
@@ -343,8 +379,13 @@ private:
 
     display.setTextSize(1);
     display.setTextColor(COLOR_WHITE);
-    display.setCursor(32, 54);
-    display.print("Speaking...");
+    if (answerTitle.length() > 0) {
+      display.setCursor(6, 54);
+      display.printf("Ans: %.15s", answerTitle.c_str());
+    } else {
+      display.setCursor(32, 54);
+      display.print("Speaking...");
+    }
   }
 
   void drawErrorFace() {
