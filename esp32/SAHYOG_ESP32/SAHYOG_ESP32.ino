@@ -47,12 +47,11 @@ void changeState(DeviceState newState) {
     case STATE_IDLE:
       wakeMgr.setStatusLed(false);
       micMgr.stopRecording();
-      wakeMgr.armWake(800); // 800ms refractory lockout prevents trailing false triggers
       break;
 
     case STATE_WAKE:
       wakeMgr.setStatusLed(true);
-      audioMgr.playWakeChime();
+      audioMgr.playVoiceSpeech(); // Speaks: "Hello Rishi, main hoon aap ki AI agent"
       break;
 
     case STATE_LISTENING:
@@ -165,8 +164,26 @@ void loop() {
   // Run background network pump
   mqttMgr.loop();
 
-  // Update OLED visual animations
-  oledMgr.updateAnimation(currentState);
+  // Check touch sensor & button gestures (Single Tap vs 3-Second Hold)
+  TouchGesture gesture = wakeMgr.checkGesture();
+  uint32_t holdMs = wakeMgr.getCurrentHoldMs();
+
+  // Update OLED visual animations (passes holdMs so it displays holding progress bar)
+  oledMgr.updateAnimation(currentState, holdMs);
+
+  // ─── Touch / Button Gesture Action ─────────────────────────────────────────
+  if (gesture == GESTURE_TAP) {
+    if (currentState == STATE_SPEAKING) {
+      // Tap while speaking: dismisses speech early
+      changeState(STATE_IDLE);
+    } else {
+      // Single Tap (< 2s): Wake up the bot!
+      changeState(STATE_WAKE);
+    }
+  } else if (gesture == GESTURE_HOLD_3SEC) {
+    // Hold for 3 Seconds: Turn ON microphone so user can talk!
+    changeState(STATE_LISTENING);
+  }
 
   // ─── Serial Command Testing ────────────────────────────────────────────────
   if (Serial.available()) {
@@ -183,22 +200,30 @@ void loop() {
 
   // ─── State Machine ─────────────────────────────────────────────────────────
   switch (currentState) {
-    case STATE_IDLE:
-      // STRICTLY IDLE: Calm blinking eyes waiting for user touch, BOOT button, or Web command!
-      if (wakeMgr.checkWakeTrigger()) {
-        changeState(STATE_WAKE);
+    case STATE_IDLE: {
+      // STRICTLY IDLE: Calm blinking eyes waiting for user tap, hold, or Web command!
+      // No automatic transitions!
+      static uint32_t lastHeartbeat = 0;
+      if (now - lastHeartbeat >= 3000) {
+        lastHeartbeat = now;
+        Serial.printf("[IDLE] Waiting... Touch(Pin %d)=%s | BOOT(Pin 0)=%s\n",
+                      TOUCH_WAKE_PIN,
+                      digitalRead(TOUCH_WAKE_PIN) ? "HIGH" : "LOW",
+                      digitalRead(BOOT_BUTTON_PIN) ? "HIGH" : "LOW");
       }
       break;
+    }
 
     case STATE_WAKE:
-      // Show greeting face briefly, then transition to listening
-      if (now - stateEntryTime > 1500) {
-        changeState(STATE_LISTENING);
+      // Waking greeting lasts 3.8s, then returns to IDLE waiting for user!
+      // IT DOES NOT AUTOMATICALLY START LISTENING!
+      if (now - stateEntryTime > 3800) {
+        changeState(STATE_IDLE);
       }
       break;
 
     case STATE_LISTENING: {
-      // Record audio from INMP441
+      // Microphone is actively recording audio!
       int16_t audioBuf[128];
       size_t count = micMgr.readAudioChunk(audioBuf, 128);
       if (count > 0) {
@@ -208,32 +233,26 @@ void loop() {
         }
       }
 
-      // Record for 4.5 seconds or until silence, then transition to thinking
-      if (now - stateEntryTime > 4500) {
+      // Record for 5 seconds while user talks, then transition to thinking
+      if (now - stateEntryTime > 5000) {
         changeState(STATE_THINKING);
       }
       break;
     }
 
     case STATE_THINKING:
+      // Show thinking animation for 2.5 seconds, then speak answer
       if (now - stateEntryTime > 2500) {
         changeState(STATE_SPEAKING);
       }
       break;
 
-    case STATE_SPEAKING: {
-      // Tap touch sensor or BOOT button to dismiss speech early
-      if (wakeMgr.checkWakeTrigger()) {
-        changeState(STATE_IDLE);
-        break;
-      }
-
-      // Return to IDLE after speech output completes — stays strictly in IDLE!
+    case STATE_SPEAKING:
+      // Speech output finishes after 3.8s -> returns strictly to IDLE!
       if (now - stateEntryTime > 3800) {
         changeState(STATE_IDLE);
       }
       break;
-    }
 
     case STATE_ERROR:
       if (now - stateEntryTime > 3000) {

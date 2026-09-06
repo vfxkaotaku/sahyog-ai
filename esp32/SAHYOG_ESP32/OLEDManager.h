@@ -183,14 +183,20 @@ public:
     display.display();
   }
 
-  void updateAnimation(DeviceState state) {
+  void updateAnimation(DeviceState state, uint32_t holdMs = 0) {
     if (!isInitialized) return;
     uint32_t now = millis();
-    if (now - lastAnimTick < 100) return;
+    if (now - lastAnimTick < 80) return;
     lastAnimTick = now;
     animFrame++;
 
     display.clearDisplay();
+
+    // If user is actively holding touch sensor, display holding progress bar
+    if (holdMs >= 200) {
+      drawHoldProgress(holdMs);
+      return;
+    }
 
     switch (state) {
       case STATE_IDLE:
@@ -216,46 +222,69 @@ public:
     display.display();
   }
 
+  void drawHoldProgress(uint32_t holdMs) {
+    display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
+    display.setCursor(14, 6);
+    display.print("HOLD TO TALK 3s");
+
+    // Progress bar frame (x=14, y=22, w=100, h=16)
+    display.drawRoundRect(14, 22, 100, 16, 4, COLOR_WHITE);
+
+    // Progress bar fill (0 to 96 px)
+    int fill = map(constrain((int)holdMs, 0, 3000), 0, 3000, 0, 96);
+    if (fill > 0) {
+      display.fillRoundRect(16, 24, fill, 12, 2, COLOR_WHITE);
+    }
+
+    // Time text
+    float s = (float)holdMs / 1000.0f;
+    display.setCursor(16, 48);
+    display.printf("Holding: %.1fs / 3.0s", s);
+
+    display.display();
+  }
+
 private:
   void drawIdleEyes() {
     // Normal calm eyes with periodic blink
     bool isBlink = (animFrame % 40 >= 38);
     if (isBlink) {
-      display.fillRect(32, 28, 20, 4, COLOR_WHITE);
-      display.fillRect(76, 28, 20, 4, COLOR_WHITE);
+      display.fillRect(32, 26, 20, 4, COLOR_WHITE);
+      display.fillRect(76, 26, 20, 4, COLOR_WHITE);
     } else {
       // Rounded robot eyes
-      display.fillRoundRect(30, 20, 24, 20, 6, COLOR_WHITE);
-      display.fillRoundRect(74, 20, 24, 20, 6, COLOR_WHITE);
+      display.fillRoundRect(30, 18, 24, 20, 6, COLOR_WHITE);
+      display.fillRoundRect(74, 18, 24, 20, 6, COLOR_WHITE);
       // Eye pupils (looking slightly around)
       int offset = (animFrame % 60 > 30) ? 2 : -2;
-      display.fillCircle(42 + offset, 30, 4, COLOR_BLACK);
-      display.fillCircle(86 + offset, 30, 4, COLOR_BLACK);
+      display.fillCircle(42 + offset, 28, 4, COLOR_BLACK);
+      display.fillCircle(86 + offset, 28, 4, COLOR_BLACK);
     }
 
     display.setTextSize(1);
     display.setTextColor(COLOR_WHITE);
-    display.setCursor(18, 52);
-    display.print("SAHYOG AI : IDLE");
+    display.setCursor(4, 53);
+    display.print("TAP:Wake | HOLD 3s:Mic");
   }
 
   void drawWakeFace() {
     // Excited, wide open happy eyes
-    display.fillCircle(42, 28, 14, COLOR_WHITE);
-    display.fillCircle(86, 28, 14, COLOR_WHITE);
-    display.fillCircle(42, 28, 6, COLOR_BLACK);
-    display.fillCircle(86, 28, 6, COLOR_BLACK);
-    display.fillCircle(45, 25, 2, COLOR_WHITE); // highlight
-    display.fillCircle(89, 25, 2, COLOR_WHITE);
+    display.fillCircle(42, 26, 14, COLOR_WHITE);
+    display.fillCircle(86, 26, 14, COLOR_WHITE);
+    display.fillCircle(42, 26, 6, COLOR_BLACK);
+    display.fillCircle(86, 26, 6, COLOR_BLACK);
+    display.fillCircle(45, 23, 2, COLOR_WHITE); // highlight
+    display.fillCircle(89, 23, 2, COLOR_WHITE);
 
     // Smile
-    display.drawCircle(64, 42, 10, COLOR_WHITE);
-    display.fillRect(52, 32, 24, 10, COLOR_BLACK);
+    display.drawCircle(64, 40, 10, COLOR_WHITE);
+    display.fillRect(52, 30, 24, 10, COLOR_BLACK);
 
     display.setTextSize(1);
     display.setTextColor(COLOR_WHITE);
-    display.setCursor(30, 54);
-    display.print("Namaste! :)");
+    display.setCursor(16, 54);
+    display.print("Namaste! Rishi :)");
   }
 
   void drawListeningWaveform() {

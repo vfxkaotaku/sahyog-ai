@@ -1,11 +1,13 @@
 /**
  * ==============================================================================
- * WakeManager.h — Capacitive Touch & Button Wake Trigger for SAHYOG Node
- * Supports:
- *   1. TTP223 Digital Touch Sensor Module (GPIO 33) with auto-polarity detection
- *   2. Built-in BOOT Button on ESP32 (GPIO 0)
- *   3. Robust noise filtering (35ms hold check) & refractory lockout upon IDLE
- *      to 100% prevent false-trigger loops!
+ * WakeManager.h — Capacitive Touch & BOOT Button Gesture Engine
+ * SAHYOG AI Hardware Kiosk Node
+ *
+ * Implements:
+ *   1. Single Tap (< 2s): Wakes up the bot (happy greeting face + voice speech)
+ *   2. Hold for 3 Seconds (>= 3000ms): Turns on the microphone (Listening mode)
+ *   3. Rejects noise spikes (< 60ms) and guards against stuck sensors (> 7s)
+ *   4. Supports TTP223 touch switch (GPIO 33) and built-in BOOT button (GPIO 0)
  * ==============================================================================
  */
 
@@ -15,20 +17,28 @@
 #include <Arduino.h>
 #include "Config.h"
 
+enum TouchGesture {
+  GESTURE_NONE = 0,
+  GESTURE_TAP = 1,       // Single tap (< 2s): Bot wakes up
+  GESTURE_HOLD_3SEC = 2  // Held for 3 seconds: Microphone turns on
+};
+
 class WakeManager {
 private:
-  uint32_t lastTouchTime;
+  uint32_t pressStartTime;
+  uint32_t lastReleaseTime;
   uint32_t lastActivityTime;
-  uint32_t lockoutUntil;
-  bool wasTouched;
-  int restingTouchLevel; // 0 = resting LOW (Standard TTP223), 1 = resting HIGH (Inverted)
+  bool isPressed;
+  bool holdTriggered;
+  int restingTouchLevel; // 0 = resting LOW (standard TTP223), 1 = resting HIGH (inverted)
 
 public:
   WakeManager()
-    : lastTouchTime(0),
+    : pressStartTime(0),
+      lastReleaseTime(0),
       lastActivityTime(0),
-      lockoutUntil(0),
-      wasTouched(false),
+      isPressed(false),
+      holdTriggered(false),
       restingTouchLevel(0) {}
 
   void begin() {
@@ -40,7 +50,8 @@ public:
     digitalWrite(STATUS_LED_PIN, LOW);
     digitalWrite(AUX_LED_PIN, LOW);
 
-    delay(100);
+    // Allow 400ms for power rails and TTP223 internal calibration to settle
+    delay(400);
 
     // Auto-detect resting level of GPIO 33
     int highCount = 0;
@@ -48,71 +59,112 @@ public:
       if (digitalRead(TOUCH_WAKE_PIN) == HIGH) highCount++;
       delay(5);
     }
-    // If resting state is mostly HIGH, active trigger is LOW (inverted mode).
-    // Otherwise resting is LOW, active trigger is HIGH.
-    restingTouchLevel = (highCount > 10) ? 1 : 0;
+    // Standard TTP223 rests LOW and goes HIGH on touch
+    // If resting state is HIGH, active trigger is LOW (inverted)
+    restingTouchLevel = (highCount >= 15) ? 1 : 0;
 
     lastActivityTime = millis();
+    lastReleaseTime = millis();
 
-    Serial.println("[Wake] Wake Sensors Configured:");
-    Serial.printf("  - Built-in BOOT Button: GPIO %d (Active LOW)\n", BOOT_BUTTON_PIN);
-    Serial.printf("  - Touch Sensor: GPIO %d (Resting Level: %s, Active when: %s)\n",
+    Serial.println("\n========================================================");
+    Serial.println("  [WakeManager] Interactive Touch & Button Engine Ready");
+    Serial.printf("  • Capacitive Touch Pin : GPIO %d (Resting: %s, Active: %s)\n",
                   TOUCH_WAKE_PIN,
                   restingTouchLevel == 0 ? "LOW" : "HIGH",
-                  restingTouchLevel == 0 ? "HIGH (Standard TTP223)" : "LOW (Inverted)");
-
-    // Initial 1200ms grace period to let power stabilize
-    armWake(1200);
+                  restingTouchLevel == 0 ? "HIGH" : "LOW");
+    Serial.printf("  • Built-in BOOT Button : GPIO %d (Active LOW)\n", BOOT_BUTTON_PIN);
+    Serial.println("  • Interaction Gestures:");
+    Serial.println("      - TAP ONCE (< 2s)  --> Wake Up Bot");
+    Serial.println("      - HOLD FOR 3 SEC   --> Turn ON Microphone (Talk)");
+    Serial.println("========================================================\n");
   }
 
-  // Grace period lockout: protects against false triggers immediately after state changes
-  void armWake(uint32_t graceMs = 800) {
-    lockoutUntil = millis() + graceMs;
-    wasTouched = true; // User must release before a new wake trigger can be registered
-  }
-
-  // Returns true if a valid new wake event was triggered
-  bool checkWakeTrigger() {
-    uint32_t now = millis();
-
-    // 1. Refractory lockout guard
-    if (now < lockoutUntil) {
-      return false;
+  // Returns true if either the TTP223 capacitive switch or the BOOT button is being pressed
+  bool isRawSensorActive() {
+    // 1. Built-in BOOT button (GPIO 0, active LOW with pullup)
+    if (digitalRead(BOOT_BUTTON_PIN) == LOW) {
+      return true;
     }
 
-    // 2. Physical BOOT button on ESP32 (active LOW on GPIO 0)
-    bool buttonBoot = (digitalRead(BOOT_BUTTON_PIN) == LOW);
-
-    // 3. TTP223 digital touch sensor module (detects difference from resting level)
-    bool touchActive = (digitalRead(TOUCH_WAKE_PIN) != restingTouchLevel);
-
-    bool isTriggered = buttonBoot || touchActive;
-
-    if (isTriggered) {
-      if (!wasTouched && (now - lastTouchTime > TOUCH_DEBOUNCE_MS)) {
-        // Confirmation delay: pin must remain active for 35ms to reject RF/audio amplifier spikes
-        delay(35);
-        bool confirmBoot = (digitalRead(BOOT_BUTTON_PIN) == LOW);
-        bool confirmTouch = (digitalRead(TOUCH_WAKE_PIN) != restingTouchLevel);
-
-        if (confirmBoot || confirmTouch) {
-          wasTouched = true;
-          lastTouchTime = now;
-          lastActivityTime = now;
-          const char* src = confirmBoot ? "Built-in BOOT Button (GPIO 0)" : "TTP223 Touch Sensor (GPIO 33)";
-          Serial.printf("[Wake Event] >>> ACTIVATED by %s <<<\n", src);
-
-          // Blink blue LED to acknowledge wake
-          digitalWrite(STATUS_LED_PIN, HIGH);
-          return true;
-        }
-      }
-    } else {
-      // User has released button and touch
-      wasTouched = false;
+    // 2. TTP223 capacitive touch switch (detects difference from resting level)
+    if (digitalRead(TOUCH_WAKE_PIN) != restingTouchLevel) {
+      return true;
     }
 
     return false;
+  }
+
+  // Returns current hold duration in ms if sensor is currently pressed, or 0 if released
+  uint32_t getCurrentHoldMs() const {
+    if (!isPressed) return 0;
+    return (millis() - pressStartTime);
+  }
+
+  bool isCurrentlyHolding() const {
+    return isPressed;
+  }
+
+  // Process touch sensor and return GESTURE_TAP, GESTURE_HOLD_3SEC, or GESTURE_NONE
+  TouchGesture checkGesture() {
+    uint32_t now = millis();
+    bool rawActive = isRawSensorActive();
+
+    if (rawActive) {
+      if (!isPressed) {
+        // Initial touch/press transition
+        isPressed = true;
+        pressStartTime = now;
+        holdTriggered = false;
+        lastActivityTime = now;
+        digitalWrite(STATUS_LED_PIN, HIGH); // Visual feedback: LED turns on immediately
+      } else {
+        // Sensor is actively being held down
+        uint32_t holdDuration = now - pressStartTime;
+
+        // Anti-stuck safety guard: If held for > 7000ms, it is a stuck sensor or floating wire
+        // Reset state so bot NEVER gets trapped in a waking/listening loop!
+        if (holdDuration > 7000) {
+          Serial.println("[Touch Safety] Sensor active > 7s! Resetting baseline to prevent loop...");
+          restingTouchLevel = digitalRead(TOUCH_WAKE_PIN);
+          isPressed = false;
+          holdTriggered = false;
+          digitalWrite(STATUS_LED_PIN, LOW);
+          return GESTURE_NONE;
+        }
+
+        // Check if held for 3 seconds
+        if (holdDuration >= 3000 && !holdTriggered) {
+          holdTriggered = true;
+          lastActivityTime = now;
+          digitalWrite(STATUS_LED_PIN, LOW);
+          Serial.println("\n[Touch] >>> 3-SECOND HOLD CONFIRMED! Turning on Microphone! <<<");
+          return GESTURE_HOLD_3SEC;
+        }
+      }
+    } else {
+      // Sensor is NOT active (released)
+      if (isPressed) {
+        uint32_t pressDuration = now - pressStartTime;
+        isPressed = false;
+        lastReleaseTime = now;
+        lastActivityTime = now;
+        digitalWrite(STATUS_LED_PIN, LOW);
+
+        // If it was already triggered as a 3-second hold, ignore the release
+        if (holdTriggered) {
+          holdTriggered = false;
+          return GESTURE_NONE;
+        }
+
+        // Single Tap: must be between 60ms (rejects noise spikes) and 2000ms
+        if (pressDuration >= 60 && pressDuration < 2000) {
+          Serial.printf("\n[Touch] >>> SINGLE TAP DETECTED (%lu ms)! Waking up Bot! <<<\n", pressDuration);
+          return GESTURE_TAP;
+        }
+      }
+    }
+
+    return GESTURE_NONE;
   }
 
   void recordActivity() {

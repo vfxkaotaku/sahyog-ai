@@ -11,6 +11,7 @@
 
 #include <Arduino.h>
 #include "Config.h"
+#include "audio_data.h"
 
 class AudioManager {
 private:
@@ -134,6 +135,35 @@ public:
     uint8_t last_sample = 128 + ((last_centered * volume) / 100);
     dacRamp(last_sample, 128, 80);
     dacWrite(AUDIO_DAC_PIN, 128);
+  }
+
+  // Play natural recorded speech: "Hello Rishi, main hoon aap ki AI agent"
+  void playVoiceSpeech() {
+    Serial.printf("[Audio] Playing Voice Speech (\"Hello Rishi, main hoon aap ki AI agent\")... Samples: %d\n", AUDIO_SAMPLE_COUNT);
+    uint8_t first_raw = pgm_read_byte(&(audio_data[0]));
+    int16_t first_centered = (int16_t)first_raw - 128;
+    uint8_t first_sample = 128 + ((first_centered * volume) / 100);
+    dacRamp(128, first_sample, 80);
+
+    uint64_t startTimeUs = esp_timer_get_time();
+
+    for (uint32_t i = 0; i < AUDIO_SAMPLE_COUNT; i++) {
+      uint8_t raw = pgm_read_byte(&(audio_data[i]));
+      int16_t centered = (int16_t)raw - 128;
+      int16_t scaled = 128 + ((centered * volume) / 100);
+      uint8_t output = (uint8_t)constrain(scaled, 0, 255);
+
+      dacWrite(AUDIO_DAC_PIN, output);
+
+      uint64_t targetTimeUs = startTimeUs + ((uint64_t)(i + 1) * 1000000ULL) / AUDIO_SAMPLE_RATE;
+      while (esp_timer_get_time() < targetTimeUs) {
+        // Precise timer anchor
+      }
+    }
+
+    dacRamp(128, 128, 60);
+    dacWrite(AUDIO_DAC_PIN, 128);
+    Serial.println("[Audio] Voice playback finished.");
   }
 };
 
