@@ -16,8 +16,8 @@
 #define FIRMWARE_VERSION        "1.2.0"
 
 // ─── Network Configuration ───────────────────────────────────────────────────
-#define WIFI_SSID               "YOUR_WIFI_SSID"
-#define WIFI_PASSWORD           "YOUR_WIFI_PASSWORD"
+#define WIFI_SSID               "Rishi"
+#define WIFI_PASSWORD           "1122334455"
 #define MQTT_BROKER             "broker.hivemq.com"
 #define MQTT_PORT               1883
 #define MQTT_USER               ""
@@ -31,7 +31,8 @@
 #define MQTT_TOPIC_AUDIO_RX     "sahyog/" DEVICE_ID "/speaker/audio"
 
 // ─── Hardware Pin Definitions ─────────────────────────────────────────────────
-// I2C OLED (SSD1306 128x64)
+// I2C OLED (1.3" SH1106 or 0.96" SSD1306 128x64)
+#define USE_SH1106_1_3_INCH     1       // 1 = 1.3" OLED (SH1106 controller), 0 = 0.96" OLED (SSD1306)
 #define OLED_SDA_PIN            21
 #define OLED_SCL_PIN            22
 #define OLED_I2C_ADDR           0x3C

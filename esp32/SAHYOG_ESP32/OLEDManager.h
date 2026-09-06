@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * OLEDManager.h — Animated Robot Expressions & UI for SSD1306 (128x64)
+ * OLEDManager.h — Animated Robot Expressions & UI for 1.3" SH1106 or 0.96" SSD1306
  * ==============================================================================
  */
 
@@ -9,22 +9,40 @@
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include "Config.h"
+
+#if USE_SH1106_1_3_INCH
+  #include <Adafruit_SH110X.h>
+  #define COLOR_WHITE SH110X_WHITE
+  #define COLOR_BLACK SH110X_BLACK
+#else
+  #include <Adafruit_SSD1306.h>
+  #define COLOR_WHITE SSD1306_WHITE
+  #define COLOR_BLACK SSD1306_BLACK
+#endif
 
 class OLEDManager {
 private:
+#if USE_SH1106_1_3_INCH
+  Adafruit_SH1106G display;
+#else
   Adafruit_SSD1306 display;
+#endif
   bool isInitialized;
   uint32_t lastAnimTick;
   uint8_t animFrame;
 
 public:
+#if USE_SH1106_1_3_INCH
   OLEDManager() : display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1), isInitialized(false), lastAnimTick(0), animFrame(0) {}
+#else
+  OLEDManager() : display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1), isInitialized(false), lastAnimTick(0), animFrame(0) {}
+#endif
 
   bool begin() {
     Wire.begin(OLED_SDA_PIN, OLED_SCL_PIN);
-    delay(100); // Allow SSD1306 charge pump power to stabilize
+    Wire.setClock(100000); // 100kHz safe clock speed eliminates breadboard wire noise
+    delay(100);
 
     Serial.println("\n[OLED] Scanning I2C bus on SDA=" + String(OLED_SDA_PIN) + ", SCL=" + String(OLED_SCL_PIN) + "...");
     uint8_t foundAddr = 0;
@@ -48,9 +66,22 @@ public:
       foundAddr = OLED_I2C_ADDR; // Default to 0x3C
     }
 
-    // Attempt initialization on detected address
+#if USE_SH1106_1_3_INCH
+    Serial.println("[OLED] Initializing 1.3 inch SH1106 controller...");
+    if (!display.begin(foundAddr, true)) {
+      Serial.printf("[OLED] SH1106 Init failed at 0x%02X, trying alternate address...\n", foundAddr);
+      uint8_t altAddr = (foundAddr == 0x3C) ? 0x3D : 0x3C;
+      if (!display.begin(altAddr, true)) {
+        Serial.println("[OLED] FATAL: Could not initialize SH1106 display.");
+        isInitialized = false;
+        return false;
+      }
+      foundAddr = altAddr;
+    }
+#else
+    Serial.println("[OLED] Initializing 0.96 inch SSD1306 controller...");
     if (!display.begin(SSD1306_SWITCHCAPVCC, foundAddr)) {
-      Serial.printf("[OLED] Init failed at 0x%02X, trying alternate address...\n", foundAddr);
+      Serial.printf("[OLED] SSD1306 Init failed at 0x%02X, trying alternate address...\n", foundAddr);
       uint8_t altAddr = (foundAddr == 0x3C) ? 0x3D : 0x3C;
       if (!display.begin(SSD1306_SWITCHCAPVCC, altAddr)) {
         Serial.println("[OLED] FATAL: Could not initialize SSD1306 display.");
@@ -59,18 +90,17 @@ public:
       }
       foundAddr = altAddr;
     }
+#endif
 
     isInitialized = true;
-    Serial.printf("[OLED] SSD1306 Display ACTIVE at 0x%02X (128x64)!\n\n", foundAddr);
-    Wire.setClock(100000); // 100kHz safe clock speed eliminates breadboard wire noise
-    
+    Serial.printf("[OLED] Display ACTIVE at 0x%02X (128x64)!\n\n", foundAddr);
+
     // Clear initial hardware GDDRAM noise
     display.clearDisplay();
     display.display();
     delay(50);
-    
-    display.setTextColor(SSD1306_WHITE);
-    display.dim(false); // Ensure maximum brightness
+
+    display.setTextColor(COLOR_WHITE);
     showBootScreen();
     return true;
   }
@@ -78,21 +108,21 @@ public:
   void showBootScreen() {
     if (!isInitialized) return;
     display.clearDisplay();
-    
+
     // Draw boundary box to test display dimensions
-    display.drawRect(0, 0, 128, 64, SSD1306_WHITE);
-    
+    display.drawRect(0, 0, 128, 64, COLOR_WHITE);
+
     display.setTextSize(2);
-    display.setTextColor(SSD1306_WHITE);
+    display.setTextColor(COLOR_WHITE);
     display.setCursor(18, 12);
     display.print("SAHYOG");
-    
+
     display.setTextSize(1);
     display.setCursor(24, 34);
     display.print("AI Rural Node");
     display.setCursor(18, 48);
     display.print("System Ready!");
-    
+
     display.display();
     delay(1500); // Keep boot screen visible for 1.5s
   }
@@ -135,37 +165,39 @@ private:
     // Normal calm eyes with periodic blink
     bool isBlink = (animFrame % 40 >= 38);
     if (isBlink) {
-      display.fillRect(32, 28, 20, 4, SSD1306_WHITE);
-      display.fillRect(76, 28, 20, 4, SSD1306_WHITE);
+      display.fillRect(32, 28, 20, 4, COLOR_WHITE);
+      display.fillRect(76, 28, 20, 4, COLOR_WHITE);
     } else {
       // Rounded robot eyes
-      display.fillRoundRect(30, 20, 24, 20, 6, SSD1306_WHITE);
-      display.fillRoundRect(74, 20, 24, 20, 6, SSD1306_WHITE);
+      display.fillRoundRect(30, 20, 24, 20, 6, COLOR_WHITE);
+      display.fillRoundRect(74, 20, 24, 20, 6, COLOR_WHITE);
       // Eye pupils (looking slightly around)
       int offset = (animFrame % 60 > 30) ? 2 : -2;
-      display.fillCircle(42 + offset, 30, 4, SSD1306_BLACK);
-      display.fillCircle(86 + offset, 30, 4, SSD1306_BLACK);
+      display.fillCircle(42 + offset, 30, 4, COLOR_BLACK);
+      display.fillCircle(86 + offset, 30, 4, COLOR_BLACK);
     }
 
     display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
     display.setCursor(18, 52);
     display.print("SAHYOG AI : IDLE");
   }
 
   void drawWakeFace() {
     // Excited, wide open happy eyes
-    display.fillCircle(42, 28, 14, SSD1306_WHITE);
-    display.fillCircle(86, 28, 14, SSD1306_WHITE);
-    display.fillCircle(42, 28, 6, SSD1306_BLACK);
-    display.fillCircle(86, 28, 6, SSD1306_BLACK);
-    display.fillCircle(45, 25, 2, SSD1306_WHITE); // highlight
-    display.fillCircle(89, 25, 2, SSD1306_WHITE);
+    display.fillCircle(42, 28, 14, COLOR_WHITE);
+    display.fillCircle(86, 28, 14, COLOR_WHITE);
+    display.fillCircle(42, 28, 6, COLOR_BLACK);
+    display.fillCircle(86, 28, 6, COLOR_BLACK);
+    display.fillCircle(45, 25, 2, COLOR_WHITE); // highlight
+    display.fillCircle(89, 25, 2, COLOR_WHITE);
 
     // Smile
-    display.drawCircle(64, 42, 10, SSD1306_WHITE);
-    display.fillRect(52, 32, 24, 10, SSD1306_BLACK);
+    display.drawCircle(64, 42, 10, COLOR_WHITE);
+    display.fillRect(52, 32, 24, 10, COLOR_BLACK);
 
     display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
     display.setCursor(30, 54);
     display.print("Namaste! :)");
   }
@@ -173,6 +205,7 @@ private:
   void drawListeningWaveform() {
     // Listening sound bars
     display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
     display.setCursor(26, 4);
     display.print("[ LISTENING ]");
 
@@ -182,7 +215,7 @@ private:
     for (int i = 0; i < bars; i++) {
       int height = 8 + (int)(18.0 * sin((animFrame * 0.4) + (i * 0.7)));
       if (height < 4) height = 4;
-      display.fillRect(startX + (i * spacing), 38 - (height / 2), 5, height, SSD1306_WHITE);
+      display.fillRect(startX + (i * spacing), 38 - (height / 2), 5, height, COLOR_WHITE);
     }
 
     display.setCursor(16, 54);
@@ -191,6 +224,7 @@ private:
 
   void drawThinkingDots() {
     display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
     display.setCursor(28, 8);
     display.print("Thinking...");
 
@@ -204,7 +238,7 @@ private:
       int x = centerX + (int)(cos(angle) * radius);
       int y = centerY + (int)(sin(angle) * radius);
       int size = (i == (animFrame % 8)) ? 3 : 1;
-      display.fillCircle(x, y, size, SSD1306_WHITE);
+      display.fillCircle(x, y, size, COLOR_WHITE);
     }
 
     display.setCursor(20, 54);
@@ -213,28 +247,30 @@ private:
 
   void drawSpeakingMouth() {
     // Talking robot face with pulsing mouth
-    display.fillRoundRect(30, 14, 24, 16, 4, SSD1306_WHITE);
-    display.fillRoundRect(74, 14, 24, 16, 4, SSD1306_WHITE);
-    display.fillCircle(42, 22, 3, SSD1306_BLACK);
-    display.fillCircle(86, 22, 3, SSD1306_BLACK);
+    display.fillRoundRect(30, 14, 24, 16, 4, COLOR_WHITE);
+    display.fillRoundRect(74, 14, 24, 16, 4, COLOR_WHITE);
+    display.fillCircle(42, 22, 3, COLOR_BLACK);
+    display.fillCircle(86, 22, 3, COLOR_BLACK);
 
     // Mouth animation (opening and closing)
     int mouthH = 4 + (int)(8.0 * fabs(sin(animFrame * 0.5)));
-    display.fillRoundRect(50, 38, 28, mouthH, 3, SSD1306_WHITE);
+    display.fillRoundRect(50, 38, 28, mouthH, 3, COLOR_WHITE);
 
     display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
     display.setCursor(32, 54);
     display.print("Speaking...");
   }
 
   void drawErrorFace() {
     // Cross eyes (X X)
-    display.drawLine(32, 18, 48, 34, SSD1306_WHITE);
-    display.drawLine(48, 18, 32, 34, SSD1306_WHITE);
-    display.drawLine(80, 18, 96, 34, SSD1306_WHITE);
-    display.drawLine(96, 18, 80, 34, SSD1306_WHITE);
+    display.drawLine(32, 18, 48, 34, COLOR_WHITE);
+    display.drawLine(48, 18, 32, 34, COLOR_WHITE);
+    display.drawLine(80, 18, 96, 34, COLOR_WHITE);
+    display.drawLine(96, 18, 80, 34, COLOR_WHITE);
 
     display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
     display.setCursor(24, 52);
     display.print("Network Error");
   }
