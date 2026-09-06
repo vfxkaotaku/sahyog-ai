@@ -38,19 +38,24 @@ public:
   bool checkWakeTrigger() {
     uint32_t now = millis();
 
-    // Check capacitive touch sensor (TTP223 is typically HIGH when touched)
-    bool touchState = (digitalRead(TOUCH_WAKE_PIN) == HIGH);
+    // 1. Check TTP223 digital module (HIGH when touched)
+    bool touchDigital = (digitalRead(TOUCH_WAKE_PIN) == HIGH);
 
-    // Also check BOOT button on ESP32 (active LOW)
-    bool buttonState = (digitalRead(BOOT_BUTTON_PIN) == LOW);
+    // 2. Check ESP32 built-in capacitive touch sensor on GPIO 33 (drops below ~40 when finger touches)
+    int capVal = touchRead(TOUCH_WAKE_PIN);
+    bool touchCapacitive = (capVal > 0 && capVal < 40);
 
-    bool isTriggered = touchState || buttonState;
+    // 3. Check physical BOOT button on ESP32 board (active LOW on GPIO 0)
+    bool buttonBoot = (digitalRead(BOOT_BUTTON_PIN) == LOW);
+
+    bool isTriggered = touchDigital || touchCapacitive || buttonBoot;
 
     if (isTriggered && !wasTouched && (now - lastTouchTime > TOUCH_DEBOUNCE_MS)) {
       wasTouched = true;
       lastTouchTime = now;
       lastActivityTime = now;
-      Serial.printf("[Wake] Triggered by: %s\n", touchState ? "Capacitive Touch" : "BOOT Button");
+      const char* triggerSource = buttonBoot ? "BOOT Button" : (touchDigital ? "TTP223 Digital Touch" : "Capacitive Wire Touch");
+      Serial.printf("[Wake Trigger] Activated by: %s (CapVal=%d)\n", triggerSource, capVal);
       return true;
     } else if (!isTriggered) {
       wasTouched = false;

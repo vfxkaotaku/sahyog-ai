@@ -11,8 +11,8 @@
 #include <Arduino.h>
 
 // ─── Device Identification ───────────────────────────────────────────────────
-#define DEVICE_ID               "SAHYOG-NODE-01"
-#define DEVICE_NAME             "Sahyog Rural Kiosk Node"
+#define DEVICE_ID               "BOT-001"
+#define DEVICE_NAME             "Government Assistant 01 (Kiosk)"
 #define FIRMWARE_VERSION        "1.2.0"
 
 // ─── Network Configuration ───────────────────────────────────────────────────
