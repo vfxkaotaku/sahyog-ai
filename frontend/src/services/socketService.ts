@@ -64,20 +64,34 @@ export function connectSocket(): void {
     });
 
     // Device state change (e.g. ESP32 touch wakes → LISTENING)
-    socket.on('device_state_change', (data: DeviceStateChange) => {
-      useDeviceStore.getState().updateDeviceState(data.deviceId, data.state);
-      // If any device starts listening, sync the web avatar
-      if (data.state === 'LISTENING') {
-        useChatStore.getState().setAvatarState('LISTENING');
-      } else if (data.state === 'IDLE') {
-        useChatStore.getState().setAvatarState('IDLE');
+    const handleStateUpdate = (data: any) => {
+      const deviceId = data.deviceId || 'BOT-001';
+      const rawState = (data.state || data.value || 'IDLE').toString().toUpperCase();
+      let state: AvatarState = 'IDLE';
+      if (rawState === 'WAKE' || rawState === 'LISTENING') state = 'LISTENING';
+      else if (rawState === 'THINKING') state = 'THINKING';
+      else if (rawState === 'SPEAKING') state = 'SPEAKING';
+      else if (rawState === 'ERROR') state = 'ERROR';
+      else if (rawState === 'CAMERA') state = 'CAMERA';
+
+      useDeviceStore.getState().updateDeviceState(deviceId, state);
+      if (deviceId === 'BOT-001') {
+        useChatStore.getState().setAvatarState(state);
       }
-    });
+    };
+
+    socket.on('device_state', handleStateUpdate);
+    socket.on('device_state_change', handleStateUpdate);
 
     // Device online/offline
-    socket.on('device_status_change', (data: DeviceStatusChange) => {
-      useDeviceStore.getState().updateDeviceStatus(data.deviceId, data.status);
-    });
+    const handleStatusUpdate = (data: any) => {
+      const deviceId = data.deviceId || 'BOT-001';
+      const status = data.status === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
+      useDeviceStore.getState().updateDeviceStatus(deviceId, status);
+    };
+
+    socket.on('device_status', handleStatusUpdate);
+    socket.on('device_status_change', handleStatusUpdate);
 
   } catch (err) {
     console.warn('[SAHYOG Socket] Could not connect, running in offline demo mode.', err);

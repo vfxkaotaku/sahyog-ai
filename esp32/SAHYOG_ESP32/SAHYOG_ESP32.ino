@@ -47,6 +47,7 @@ void changeState(DeviceState newState) {
     case STATE_IDLE:
       wakeMgr.setStatusLed(false);
       micMgr.stopRecording();
+      wakeMgr.armWake(800); // 800ms refractory lockout prevents trailing false triggers
       break;
 
     case STATE_WAKE:
@@ -88,6 +89,10 @@ void handleCommand(const char* topic, const char* payload) {
     changeState(STATE_WAKE);
   } else if (p.indexOf("SPEAK") >= 0 || p.indexOf("speak") >= 0) {
     changeState(STATE_SPEAKING);
+  } else if (p.indexOf("THINKING") >= 0 || p.indexOf("thinking") >= 0) {
+    changeState(STATE_THINKING);
+  } else if (p.indexOf("LISTEN") >= 0 || p.indexOf("listen") >= 0) {
+    changeState(STATE_LISTENING);
   } else if (p.indexOf("IDLE") >= 0 || p.indexOf("idle") >= 0) {
     changeState(STATE_IDLE);
   } else if (p.indexOf("vol+") >= 0) {
@@ -216,6 +221,12 @@ void loop() {
       break;
 
     case STATE_SPEAKING: {
+      // Tap touch sensor or BOOT button to dismiss speech early
+      if (wakeMgr.checkWakeTrigger()) {
+        changeState(STATE_IDLE);
+        break;
+      }
+
       // Play acoustic output through PAM8403 DAC
       static uint32_t lastToneStep = 0;
       if (now - lastToneStep > 500) {
