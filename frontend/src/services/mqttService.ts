@@ -64,8 +64,17 @@ export function initMqttClient(): void {
         if (subtopic === 'state') {
           const rawState = (data.state || data.value || 'IDLE').toString().toUpperCase();
           let state: AvatarState = 'IDLE';
-          if (rawState === 'WAKE' || rawState === 'LISTENING') {
+          if (rawState === 'WAKE') {
+            state = 'LISTENING'; // Show LISTENING avatar state on web during ESP32 wake
+          } else if (rawState === 'LISTENING') {
             state = 'LISTENING';
+            // ── Hardware-to-Web bridge ─────────────────────────────────────────
+            // The user held the capacitive touch for 3s on ESP32 → ESP32 goes to
+            // STATE_LISTENING → MQTT → we fire an event so ChatbotPage opens mic!
+            if (deviceId === 'BOT-001') {
+              console.log('[Web MQTT] ESP32 entered LISTENING via 3s hold — opening web mic!');
+              window.dispatchEvent(new CustomEvent('sahyog:hardware:listen', { detail: { deviceId } }));
+            }
           } else if (rawState === 'THINKING') {
             state = 'THINKING';
           } else if (rawState === 'SPEAKING') {

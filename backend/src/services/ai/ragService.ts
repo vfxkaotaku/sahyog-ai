@@ -1,6 +1,10 @@
 /**
  * ragService.ts — Government Knowledge Retrieval Engine with Anti-Hallucination Guard
  * Grounded in synced schemes from Demo Government Information Portal.
+ *
+ * AI Tier Priority:
+ *   1. Google Gemini Flash API (if GEMINI_API_KEY is set)
+ *   2. Local RAG engine (scheme keyword matching + SQLite data)
  */
 
 import { db, SchemeRow } from '../../db/database';
@@ -43,6 +47,49 @@ function detectCameraIntent(query: string): boolean {
   return CAMERA_KEYWORDS.some((k) => q.includes(k));
 }
 
+// ─── Gemini Backend Integration ───────────────────────────────────────────────
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+
+const BACKEND_SYSTEM_PROMPT = `You are SAHYOG AI, a multilingual government scheme assistant for rural India. You know about PM-KISAN, PMFBY crop insurance, PM-KUSUM solar pump (90% subsidy), KCC crop loan (4% interest), PACS cooperatives, MGNREGA employment, PM Awaas Yojana, women SHG loans, farm equipment subsidy (50%), and senior citizen pensions.
+
+Rules:
+- If user writes in Hindi → respond in Hindi (Devanagari)
+- If user writes in Marathi → respond in Marathi (Devanagari)
+- Else respond in English
+- Be warm, helpful, specific about amounts, eligibility and application URLs
+- Do NOT say [DEMO] — respond naturally as a real assistant`;
+
+async function callGeminiBackend(query: string, language: string, schemeContext: string): Promise<string | null> {
+  if (!GEMINI_API_KEY) return null;
+
+  const langInstruction = language === 'hi'
+    ? 'IMPORTANT: Respond entirely in Hindi (हिंदी), Devanagari script.'
+    : language === 'mr'
+    ? 'IMPORTANT: Respond entirely in Marathi (मराठी), Devanagari script.'
+    : 'Respond in English.';
+
+  const prompt = `${BACKEND_SYSTEM_PROMPT}\n\n${langInstruction}\n\nAdditional context from synced government database:\n${schemeContext}\n\nUser query: ${query}`;
+
+  try {
+    const response = await fetch(`${GEMINI_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.6, maxOutputTokens: 1024 },
+      }),
+      signal: AbortSignal.timeout(15000),
+    } as any);
+
+    if (!response.ok) return null;
+    const data = await response.json() as any;
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 // Multilingual topic keywords mapping to schemes
 const SCHEME_KEYWORD_MAP: Record<string, string[]> = {
   'SCHEME-FEAS-001': ['equipment', 'tractor', 'machinery', 'rotavator', 'उपकरण', 'यंत्र', 'ट्रॅक्टर', 'कृषी अवजारे', 'औजार', 'मशीन', 'harvester', 'tiller'],
@@ -60,7 +107,7 @@ const SCHEME_KEYWORD_MAP: Record<string, string[]> = {
 export async function queryRag(query: string, language: string = 'en'): Promise<RagResult> {
   const q = query.toLowerCase().trim();
 
-  // 1. Check for camera document scanning intent
+  // 0. Check for camera document scanning intent first (always local)
   if (detectCameraIntent(q)) {
     const isMr = language === 'mr';
     const isHi = language === 'hi';
@@ -70,13 +117,27 @@ export async function queryRag(query: string, language: string = 'en'): Promise<
       ? 'दस्तावेज़ स्कैन करने के लिए कृपया कैमरा स्कैनर खोलें। मैं उसमें लिखा विवरण पढ़कर पूरी सहायता करूँगा।'
       : 'I can see you want me to read a physical document! Please use the Camera Simulator (/camera) to capture the document, and I will extract and explain the text for you.';
 
-    return {
-      answer: text,
-      sources: [],
-      isDemo: true,
-      requiresCamera: true,
-      canPrint: false,
-    };
+    return { answer: text, sources: [], isDemo: true, requiresCamera: true, canPrint: false };
+  }
+
+  // 1. Try Gemini AI as primary (if API key configured)
+  if (GEMINI_API_KEY) {
+    // Build a brief scheme context from the database for grounded responses
+    const schemeContext = db.schemes.slice(0, 5).map((s) =>
+      `${s.name}: ${s.benefits}. Eligibility: ${s.eligibility}. Apply at: ${s.applicationUrl}`
+    ).join('\n');
+
+    const geminiAnswer = await callGeminiBackend(query, language, schemeContext);
+    if (geminiAnswer) {
+      return {
+        answer: geminiAnswer,
+        sources: [],
+        isDemo: false,
+        requiresCamera: false,
+        canPrint: true,
+      };
+    }
+    console.warn('[Backend RAG] Gemini failed, falling back to local RAG');
   }
 
   // 1.5 Greetings & Intro Intent

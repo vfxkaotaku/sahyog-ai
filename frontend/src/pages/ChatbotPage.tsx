@@ -23,7 +23,7 @@ import MessageFeed from '../components/chat/MessageFeed';
 import ActionChips from '../components/chat/ActionChips';
 import Sidebar from '../components/layout/Sidebar';
 import { useChatStore, getStrings } from '../state/chatStore';
-import { sendMessage } from '../services/aiService';
+import { sendMessage, resetConversationHistory, isGeminiConfigured } from '../services/aiService';
 import { publishHardwareCommand } from '../services/mqttService';
 import { speakText, stopSpeaking } from '../services/ttsService';
 import type { Language } from '../types';
@@ -46,8 +46,12 @@ export default function ChatbotPage() {
   const [inputText, setInputText] = useState('');
   const [voiceAudioEnabled, setVoiceAudioEnabled] = useState(true);
   const [isListening, setIsListening] = useState(false);
+  const [listenTranscript, setListenTranscript] = useState('');
+  const [listenError, setListenError] = useState<string | null>(null);
+  const recognitionRef = useRef<any>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const strings = getStrings(language);
+  const geminiActive = isGeminiConfigured();
 
   // Welcome message on first load
   useEffect(() => {
@@ -188,23 +192,109 @@ export default function ChatbotPage() {
     return () => window.removeEventListener('sahyog:suggestion', handler);
   }, [handleSend]);
 
-  // Mic toggle (simulated)
-  const handleMic = () => {
+  // (Hardware-to-Web Bridge useEffect is defined below, after handleMic)
+
+  // Real Web Speech API voice recognition
+  const handleMic = useCallback(() => {
+    // Stop if already listening
     if (isListening) {
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
       setIsListening(false);
+      setListenTranscript('');
+      setListenError(null);
       setAvatarState('IDLE');
       publishHardwareCommand('BOT-001', 'IDLE');
       return;
     }
-    setIsListening(true);
-    setAvatarState('LISTENING');
-    publishHardwareCommand('BOT-001', 'WAKE');
-    // Simulate 3s listening then auto-stop
-    setTimeout(() => {
+
+    // Check for browser support
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setListenError('Voice input not supported in this browser. Please use Chrome or Edge.');
+      setTimeout(() => setListenError(null), 4000);
+      return;
+    }
+
+    setListenError(null);
+    const recognition = new SpeechRecognition();
+    recognitionRef.current = recognition;
+
+    // Language mapping for STT
+    recognition.lang = language === 'hi' ? 'hi-IN' : language === 'mr' ? 'mr-IN' : 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setListenTranscript('');
+      setAvatarState('LISTENING');
+      publishHardwareCommand('BOT-001', 'WAKE');
+    };
+
+    recognition.onresult = (event: any) => {
+      let interim = '';
+      let final = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          final += t;
+        } else {
+          interim += t;
+        }
+      }
+      setListenTranscript(final || interim);
+      if (final) {
+        setInputText(final);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.warn('[STT] Error:', event.error);
+      const msg = event.error === 'no-speech'
+        ? 'No speech detected. Please try again.'
+        : event.error === 'not-allowed'
+        ? 'Microphone permission denied. Allow microphone access to use voice input.'
+        : `Voice error: ${event.error}`;
+      setListenError(msg);
+      setTimeout(() => setListenError(null), 4000);
+      setIsListening(false);
+      setListenTranscript('');
+      setAvatarState('IDLE');
+    };
+
+    recognition.onend = () => {
       setIsListening(false);
       setAvatarState('IDLE');
-    }, 3000);
-  };
+      publishHardwareCommand('BOT-001', 'IDLE');
+      recognitionRef.current = null;
+      // Auto-send if we got a transcript
+      setListenTranscript(prev => {
+        if (prev.trim()) {
+          setTimeout(() => handleSend(prev.trim()), 100);
+          setInputText('');
+        }
+        return '';
+      });
+    };
+
+    recognition.start();
+  }, [isListening, language, handleSend]);
+
+  // ── Hardware-to-Web Bridge ────────────────────────────────────────────────────
+  // When user holds ESP32 touch for 3 seconds → ESP32 fires STATE_LISTENING via MQTT
+  // → mqttService fires 'sahyog:hardware:listen' → we auto-open the web mic here!
+  useEffect(() => {
+    const handler = () => {
+      if (!isListening && !isThinking) {
+        console.log('[ChatbotPage] Hardware 3s hold detected — opening web mic!');
+        handleMic();
+      }
+    };
+    window.addEventListener('sahyog:hardware:listen', handler);
+    return () => window.removeEventListener('sahyog:hardware:listen', handler);
+  }, [isListening, isThinking, handleMic]);
 
   // Real-time hardware control via HiveMQ MQTT WebSocket Bridge
   const [hwCommandStatus, setHwCommandStatus] = useState<string | null>(null);
@@ -341,13 +431,27 @@ export default function ChatbotPage() {
               <span className="hidden sm:inline">{voiceAudioEnabled ? 'Voice' : 'Mute'}</span>
             </button>
 
+            {/* Gemini AI Status Badge */}
+            <div
+              title={geminiActive ? 'Powered by Google Gemini AI (Real Conversational AI)' : 'Demo RAG mode — Add VITE_GEMINI_API_KEY to .env for real AI'}
+              className={`hidden sm:flex items-center gap-1.5 px-2 py-1 rounded-lg border text-[10px] font-semibold ${
+                geminiActive
+                  ? 'bg-violet-500/15 border-violet-500/30 text-violet-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-500'
+              }`}
+            >
+              <Zap className={`w-3 h-3 ${geminiActive ? 'text-violet-400' : 'text-slate-600'}`} />
+              {geminiActive ? 'Gemini AI' : 'Demo Mode'}
+            </div>
+
             {/* New chat */}
             <button
               onClick={() => {
                 stopSpeaking();
+                resetConversationHistory();
                 handleLangChange(language);
               }}
-              title="New conversation"
+              title="New conversation (clears history)"
               className="p-2 rounded-xl hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
             >
               <RefreshCw className="w-4 h-4" />
@@ -514,9 +618,30 @@ export default function ChatbotPage() {
                 </button>
               </div>
 
+              {/* Live voice transcript overlay */}
+              {isListening && (
+                <div className="mt-2 max-w-3xl mx-auto px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 flex items-center gap-2">
+                  <span className="flex-shrink-0 w-2 h-2 rounded-full bg-red-400 animate-ping" />
+                  <p className="text-xs text-red-300 font-medium">
+                    {listenTranscript
+                      ? `🎤 "${listenTranscript}"`
+                      : language === 'hi' ? '🎤 सुन रहा हूँ... बोलिए' : language === 'mr' ? '🎤 ऐकत आहे... बोला' : '🎤 Listening... speak now'}
+                  </p>
+                </div>
+              )}
+
+              {/* Error toast */}
+              {listenError && (
+                <div className="mt-2 max-w-3xl mx-auto px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  <p className="text-xs text-amber-300">{listenError}</p>
+                </div>
+              )}
+
               {/* Disclaimer */}
               <p className="text-center text-[10px] text-slate-600 mt-2 max-w-3xl mx-auto">
-                SAHYOG AI provides informational guidance only. Always verify with the relevant government authority or PACS Secretary.
+                {geminiActive
+                  ? '✨ Powered by Google Gemini AI · SAHYOG AI provides informational guidance only · Verify with government authority'
+                  : 'SAHYOG AI provides informational guidance only. Always verify with the relevant government authority or PACS Secretary.'}
               </p>
             </div>
           </div>

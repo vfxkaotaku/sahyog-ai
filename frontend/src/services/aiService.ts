@@ -1,15 +1,154 @@
 /**
  * aiService.ts — SAHYOG AI
  *
- * Demo AI Response Engine
- * Architecture: Chat UI → ChatStore → aiService (demo) → AIResponse
- *                                   → /api/chat (future real backend)
+ * AI Response Engine with 3-tier priority:
+ *   1. Google Gemini Flash API (real conversational AI — primary)
+ *   2. Backend /api/chat (local dev with synced RAG data — secondary)
+ *   3. Demo RAG engine (offline hardcoded fallback — tertiary)
  *
- * Anti-hallucination: All responses cite demo sources.
- * No government facts are invented — all data is clearly marked [DEMO].
+ * Anti-hallucination: Gemini is given official scheme context in system prompt.
  */
 
 import type { AIResponse, Language, SourceMetadata } from '../types';
+
+// ─── Gemini API Configuration ─────────────────────────────────────────────────
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+const GEMINI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+
+// SAHYOG AI system prompt — tells Gemini exactly who it is and what it knows
+const SAHYOG_SYSTEM_PROMPT = `You are SAHYOG AI (सहयोग AI), a friendly, warm, and knowledgeable multilingual government scheme assistant deployed on a kiosk at rural Gram Panchayats and cooperative offices across Maharashtra, India.
+
+Your primary mission is to help rural farmers, women self-help groups (SHGs), PACS members, and rural citizens understand and access government welfare schemes in simple language.
+
+## Your Knowledge Base (respond based on these):
+
+### Agriculture & Farmer Schemes:
+- **PM-KISAN (Pradhan Mantri Kisan Samman Nidhi):** ₹6,000/year in 3 installments of ₹2,000 each via DBT directly to farmers' bank accounts. Eligibility: all landholding farmer families. Apply at pmkisan.gov.in or CSC centers with Aadhaar + bank passbook + land records.
+- **PMFBY (Pradhan Mantri Fasal Bima Yojana):** Crop insurance for Kharif (2% premium), Rabi (1.5%), commercial/horticultural (5%). Government pays remaining premium. Covers losses from sowing to post-harvest. Apply before cut-off dates at banks, CSCs, or pmfby.gov.in.
+- **PM-KUSUM Solar Pump:** Up to 90% government subsidy on solar water pumps for irrigation. Apply at kusum.mahadiscom.in.
+- **Farm Equipment Subsidy (SMAM/MahaDbt):** 50% subsidy on tractors, rotavators, tillers, harvesters. Apply at mahadbt.maharashtra.gov.in.
+- **Kisan Credit Card (KCC):** Revolving crop loan up to ₹3 Lakh at effective 4% p.a. interest (with interest subvention for timely repayment). Apply at PACS, banks, or RRBs with land records + Aadhaar.
+
+### Cooperative & Rural Schemes:
+- **PACS (Primary Agricultural Credit Societies):** Grassroots cooperative institutions providing credit, seeds, fertilizers. 63,000 PACS being computerized under NABARD scheme.
+- **Women SHG (NRLM/Aajeevika):** Up to ₹1.5 Lakh bank loans at low interest for women self-help groups. "Lakhpati Didi" initiative.
+- **Cooperative Governance:** Maharashtra Co-operative Societies Act 1960, MSCS Act 2002 (amended 2023). One member one vote, democratic elections, transparent audits.
+- **PACS Computerization:** 100% grant for ERP software, biometric kiosks, digital loan processing.
+
+### Social Welfare:
+- **PM Awaas Yojana Gramin (PMAYG):** ₹1.20 Lakh financial assistance for pucca housing for rural poor. Apply at pmayg.nic.in.
+- **Senior Citizen Pension (NSAP/Shravan Bal):** Monthly ₹1,500 pension for citizens above 60 years. Apply at district social welfare office.
+- **MGNREGA:** 100 days guaranteed wage employment per year for rural households. Job cards issued at Gram Panchayat.
+- **Mudra / PMEGP:** Collateral-free loans up to ₹10 Lakh with 35% margin subsidy for small businesses.
+- **Higher Education Scholarship:** 100% tuition reimbursement for rural and farming family students. Apply at mahadbt.maharashtra.gov.in.
+
+### Documents commonly used:
+- 7/12 Utara (Saat-Baara): Land ownership record from district tehsildar at bhulekh.maharashtra.gov.in
+- Aadhaar Card, Ration Card, Caste Certificate, Income Certificate
+
+### Grievance:
+- Government scheme grievances: pgportal.gov.in
+- PM-KISAN helpline: 155261 / 1800115526 (toll-free)
+- Cooperative disputes: District Deputy Registrar of Cooperative Societies
+
+## Language Rules:
+- If the user writes in Hindi, respond entirely in Hindi (Devanagari script).
+- If the user writes in Marathi, respond entirely in Marathi (Devanagari script).
+- If the user writes in English, respond in English.
+- If the question mixes languages, respond in the majority language.
+- Always be warm, respectful, and use "आप/आपण" (not informal tu/tum).
+- Address the user as "ji" in Hindi responses (e.g., "Rishi ji").
+
+## Response Style:
+- Use bullet points for lists of features, eligibility, or steps.
+- Use bold (**text**) for scheme names and important numbers.
+- Keep responses concise but complete — include eligibility, key benefits, how to apply, and official website.
+- End responses with 2-3 suggested follow-up questions relevant to the topic.
+- Do NOT make up facts. If unsure, say "Please verify at the official government website or your local Gram Panchayat / PACS office."
+- Do NOT add [DEMO] tags — respond naturally as a real assistant.
+- Do NOT refuse to answer — always provide helpful information from your knowledge base above.`;
+
+/**
+ * Call Google Gemini Flash API directly from browser.
+ * Returns null if API key is not configured or if the call fails.
+ */
+async function callGemini(query: string, language: Language, conversationHistory: Array<{role: string, text: string}> = []): Promise<string | null> {
+  if (!GEMINI_API_KEY) return null;
+
+  const langInstruction = language === 'hi'
+    ? 'IMPORTANT: Respond in Hindi (हिंदी) using Devanagari script only.'
+    : language === 'mr'
+    ? 'IMPORTANT: Respond in Marathi (मराठी) using Devanagari script only.'
+    : 'Respond in clear English.';
+
+  try {
+    // Build conversation history for context
+    const contents: Array<{role: string, parts: Array<{text: string}>}> = [
+      // Seed the model with system context as first user+model exchange
+      {
+        role: 'user',
+        parts: [{ text: `${SAHYOG_SYSTEM_PROMPT}\n\n${langInstruction}\n\nUser query: ${query}` }]
+      }
+    ];
+
+    // If there's prior conversation, add it for context (last 6 turns max)
+    if (conversationHistory.length > 0) {
+      const recent = conversationHistory.slice(-6);
+      const historyContents: Array<{role: string, parts: Array<{text: string}>}> = [];
+      for (const turn of recent) {
+        historyContents.push({
+          role: turn.role === 'user' ? 'user' : 'model',
+          parts: [{ text: turn.text }]
+        });
+      }
+      // Restructure: system prompt first, then history, then current query
+      contents.splice(0, 1,
+        { role: 'user', parts: [{ text: `${SAHYOG_SYSTEM_PROMPT}\n\n${langInstruction}` }] },
+        { role: 'model', parts: [{ text: 'Understood. I am SAHYOG AI, ready to assist.' }] },
+        ...historyContents,
+        { role: 'user', parts: [{ text: query }] }
+      );
+    }
+
+    const resp = await fetch(`${GEMINI_ENDPOINT}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+          topP: 0.9,
+        },
+        safetySettings: [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
+        ],
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.warn('[Gemini] API error:', resp.status, err);
+      return null;
+    }
+
+    const data = await resp.json();
+    const text: string | undefined = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+
+    return text.trim();
+  } catch (e) {
+    console.warn('[Gemini] Request failed:', e);
+    return null;
+  }
+}
+
+// Store recent conversation turns for Gemini context
+const _conversationHistory: Array<{role: string, text: string}> = [];
 
 // ─── Camera-intent keywords ───────────────────────────────────────────────────
 const CAMERA_KEYWORDS = [
@@ -876,7 +1015,33 @@ export async function sendMessage(
   query: string,
   language: Language
 ): Promise<AIResponse> {
-  // Check if backend is reachable — if so, use real API with synced government data
+
+  // ─── TIER 1: Google Gemini Flash API (Real AI) ────────────────────────────
+  if (GEMINI_API_KEY) {
+    const geminiAnswer = await callGemini(query, language, _conversationHistory);
+    if (geminiAnswer) {
+      // Store this turn for future context
+      _conversationHistory.push({ role: 'user', text: query });
+      _conversationHistory.push({ role: 'model', text: geminiAnswer });
+      // Keep only last 20 turns (10 exchanges)
+      if (_conversationHistory.length > 20) _conversationHistory.splice(0, _conversationHistory.length - 20);
+
+      const needsCamera = requiresCamera(query);
+      return {
+        answer: geminiAnswer,
+        sources: [],      // Gemini answers in-context — no hardcoded sources needed
+        suggestions: [],  // Gemini includes suggestions in the answer text itself
+        requiresCamera: needsCamera,
+        isDemo: false,    // This is real AI — not demo!
+        language,
+        canPrint: true,
+        deviceId: 'BOT-001',
+      };
+    }
+    console.warn('[AI] Gemini call returned null, falling back to backend...');
+  }
+
+  // ─── TIER 2: Backend /api/chat (local dev with synced portal data) ────────
   try {
     const resp = await fetch('/api/chat', {
       method: 'POST',
@@ -903,10 +1068,8 @@ export async function sendMessage(
     // Backend unavailable — fall through to demo engine
   }
 
-  // Camera intent check
+  // ─── TIER 3: Demo RAG engine (offline hardcoded fallback) ─────────────────
   const needsCamera = requiresCamera(query);
-
-  // Categorize
   const category = matchCategory(query);
   const entry = RESPONSES[category][language];
 
@@ -919,4 +1082,14 @@ export async function sendMessage(
     language,
     canPrint: entry.canPrint,
   };
+}
+
+/** Reset conversation history (call on "new chat") */
+export function resetConversationHistory(): void {
+  _conversationHistory.length = 0;
+}
+
+/** Check if Gemini API key is configured */
+export function isGeminiConfigured(): boolean {
+  return !!(GEMINI_API_KEY && GEMINI_API_KEY.length > 10);
 }
