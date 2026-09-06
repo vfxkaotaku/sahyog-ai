@@ -161,36 +161,16 @@ public:
     playClip("ANSWER");
   }
 
-  // Play multi-scheme voice clips directly out of the ESP32 PAM8403 speaker!
+  // Play offline voice fallback directly out of the ESP32 PAM8403 speaker
   void playClip(const String& clipId) {
     String c = clipId;
     c.toUpperCase();
 
-    if (c == "PM_KISAN" || c == "PMKISAN") {
-      Serial.printf("[Audio] ESP32 Speaker: PM-KISAN Voice ('सालाना ₹6000 मिलते हैं') Samples: %d\n", PMKISAN_SAMPLE_COUNT);
-      playTone(659, 60);
-      delay(40);
-      playBuffer(audio_pmkisan, PMKISAN_SAMPLE_COUNT, AUDIO_SAMPLE_RATE);
-    } else if (c == "PMFBY" || c == "INSURANCE" || c == "BIMA") {
-      Serial.printf("[Audio] ESP32 Speaker: PMFBY Voice ('फसल नुकसान का मुआवज़ा') Samples: %d\n", PMFBY_SAMPLE_COUNT);
-      playTone(659, 60);
-      delay(40);
-      playBuffer(audio_pmfby, PMFBY_SAMPLE_COUNT, AUDIO_SAMPLE_RATE);
-    } else if (c == "KCC" || c == "LOAN" || c == "CREDIT") {
-      Serial.printf("[Audio] ESP32 Speaker: KCC Voice ('कम ब्याज पर ऋण मिलता है') Samples: %d\n", KCC_SAMPLE_COUNT);
-      playTone(659, 60);
-      delay(40);
-      playBuffer(audio_kcc, KCC_SAMPLE_COUNT, AUDIO_SAMPLE_RATE);
-    } else if (c == "LISTEN") {
-      Serial.printf("[Audio] ESP32 Speaker: Listen Prompt ('जी बोलिए, मैं सुन रही हूँ') Samples: %d\n", LISTEN_SAMPLE_COUNT);
-      playTone(523, 60);
-      delay(30);
-      playBuffer(audio_listen, LISTEN_SAMPLE_COUNT, AUDIO_SAMPLE_RATE);
-    } else if (c == "WAKE") {
+    if (c == "WAKE") {
       playWakeSpeech();
     } else {
-      // General Answer: "आपका उत्तर तैयार है"
-      Serial.printf("[Audio] ESP32 Speaker: General Answer ('आपका उत्तर तैयार है') Samples: %d\n", ANSWER_SAMPLE_COUNT);
+      // Answer fallback: "आपका उत्तर तैयार है"
+      Serial.printf("[Audio] ESP32 Speaker: Offline Answer ('Aapka uttar taiyar hai') Samples: %d\n", ANSWER_SAMPLE_COUNT);
       playTone(659, 70);
       playTone(880, 100);
       delay(40);

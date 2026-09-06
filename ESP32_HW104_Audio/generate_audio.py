@@ -1,15 +1,12 @@
 """
 generate_audio.py
 =================
-Generates the complete multi-scheme voice library for SAHYOG AI ESP32:
-  1. Wake Greeting  : "Hello Rishi, main hoon aap ki AI agent"
-  2. Listening Prompt: "जी बोलिए, मैं सुन रही हूँ" (Ji boliye, main sun rahi hoon)
-  3. General Answer : "आपका उत्तर तैयार है" (Aapka uttar taiyar hai)
-  4. PM-KISAN Scheme: "पीएम किसान में सालाना छह हज़ार रुपये मिलते हैं"
-  5. PMFBY Insurance: "फसल बीमा योजना में नुकसान का मुआवज़ा मिलता है"
-  6. KCC Credit Card: "किसान क्रेडिट कार्ड पर कम ब्याज पर ऋण मिलता है"
+Generates core offline fallback speech for SAHYOG AI ESP32:
+  1. Wake Phrase   : "Hello Rishi, main hoon aap ki AI agent"
+  2. Answer Phrase : "आपका उत्तर तैयार है" (Aapka uttar taiyar hai)
 
-Uses gTTS for voice generation and miniaudio for clean 11025 Hz resampling.
+Dynamic real-time speech (in Marathi, Hindi, and English) is streamed
+live from the backend at 11025 Hz directly into the ESP32 DAC!
 """
 
 import os
@@ -36,12 +33,8 @@ SAMPLE_RATE = 11025
 WAV_DIR = "data"
 
 CLIPS = [
-    ("audio_wake",    "WAKE",    "Hello Rishi, main hoon aap ki AI agent", "hi"),
-    ("audio_listen",  "LISTEN",  "जी बोलिए, मैं सुन रही हूँ",                "hi"),
-    ("audio_answer",  "ANSWER",  "आपका उत्तर तैयार है",                      "hi"),
-    ("audio_pmkisan", "PMKISAN", "पीएम किसान में सालाना छह हज़ार रुपये मिलते हैं", "hi"),
-    ("audio_pmfby",   "PMFBY",   "फसल बीमा योजना में नुकसान का मुआवज़ा मिलता है", "hi"),
-    ("audio_kcc",     "KCC",     "किसान क्रेडिट कार्ड पर कम ब्याज पर ऋण मिलता है", "hi"),
+    ("audio_wake",   "WAKE",   "Hello Rishi, main hoon aap ki AI agent", "hi"),
+    ("audio_answer", "ANSWER", "आपका उत्तर तैयार है",                     "hi"),
 ]
 
 def text_to_pcm(text, lang="hi", temp_name="temp.mp3"):
@@ -53,7 +46,6 @@ def text_to_pcm(text, lang="hi", temp_name="temp.mp3"):
     if os.path.exists(temp_name):
         os.remove(temp_name)
 
-    # Normalize to 82% peak amplitude
     max_amp = max(abs(s) for s in samples) if samples else 1
     scale = (32767.0 * 0.82) / max_amp if max_amp > 0 else 1.0
 
@@ -85,7 +77,7 @@ def main():
         pass
 
     print("=" * 65)
-    print("  SAHYOG AI — ESP32 Multi-Phrase Speech Generator (11025 Hz)")
+    print("  SAHYOG AI — ESP32 Dual Speech Generator (11025 Hz)")
     print("=" * 65)
 
     generated = []
@@ -101,8 +93,10 @@ def main():
 
     header_content = []
     header_content.append("// ============================================================\n")
-    header_content.append("//  Auto-generated 11025 Hz Multi-Scheme Audio Data for SAHYOG AI\n")
-    header_content.append("//  Total Audio Size: {:.1f} KB in PROGMEM\n".format(total_samples / 1024.0))
+    header_content.append("//  Auto-generated 11025 Hz Audio Data Header for SAHYOG AI ESP32\n")
+    header_content.append("//  Wake Phrase   : Hello Rishi, main hoon aap ki AI agent\n")
+    header_content.append("//  Answer Phrase : Aapka uttar taiyar hai\n")
+    header_content.append("//  Total Flash Size: {:.1f} KB\n".format(total_samples / 1024.0))
     header_content.append("// ============================================================\n\n")
     header_content.append("#pragma once\n")
     header_content.append("#include <Arduino.h>\n\n")
@@ -113,7 +107,6 @@ def main():
         header_content.append(f"#define {key}_SAMPLE_COUNT     {count}\n")
     header_content.append("\n")
 
-    # Legacy compatibility aliases
     header_content.append("// Legacy aliases\n")
     header_content.append("#define AUDIO_SAMPLE_COUNT     WAKE_SAMPLE_COUNT\n\n")
 
@@ -139,7 +132,7 @@ def main():
         sz = os.path.getsize(t) / 1024.0
         print(f"  [SAVED] {t} ({sz:.1f} KB)")
 
-    # Save individual WAV files for testing
+    # Save individual WAV files
     os.makedirs(WAV_DIR, exist_ok=True)
     for var_name, key, pcm, count, text in generated:
         wav_path = os.path.join(WAV_DIR, f"{key.lower()}.wav")
@@ -150,8 +143,7 @@ def main():
             wf.writeframes(pcm)
 
     print("\n" + "=" * 65)
-    print("  SUCCESS! Full multi-scheme voice library generated.")
-    print(f"  Total audio footprint: {total_samples/1024.0:.1f} KB")
+    print("  SUCCESS! Flash footprint optimized to {:.1f} KB".format(total_samples/1024.0))
     print("=" * 65)
 
 if __name__ == "__main__":
