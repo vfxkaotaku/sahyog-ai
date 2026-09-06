@@ -12,6 +12,7 @@ import SchemesAdmin from './pages/SchemesAdmin';
 import ConversationsAdmin from './pages/ConversationsAdmin';
 import LogsAdmin from './pages/LogsAdmin';
 import { connectSocket } from './services/socketService';
+import { initMqttClient } from './services/mqttService';
 
 const router = createHashRouter([
   { path: '/', element: <ChatbotPage /> },
@@ -34,7 +35,9 @@ const router = createHashRouter([
 
 export default function App() {
   useEffect(() => {
-    // Try to connect to backend WebSocket (gracefully fails if offline)
+    // 1. Direct real-time MQTT connection to HiveMQ over WSS (works on GitHub Pages & Localhost)
+    initMqttClient();
+    // 2. Local Node backend Socket.IO connection (if running)
     connectSocket();
   }, []);
 

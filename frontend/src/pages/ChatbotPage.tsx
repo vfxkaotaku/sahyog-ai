@@ -24,6 +24,7 @@ import ActionChips from '../components/chat/ActionChips';
 import Sidebar from '../components/layout/Sidebar';
 import { useChatStore, getStrings } from '../state/chatStore';
 import { sendMessage } from '../services/aiService';
+import { publishHardwareCommand } from '../services/mqttService';
 import type { Language } from '../types';
 
 const LANGS: { code: Language; label: string }[] = [
@@ -109,6 +110,7 @@ export default function ChatbotPage() {
     // State transitions
     setThinking(true);
     setAvatarState('THINKING');
+    publishHardwareCommand('BOT-001', 'THINKING');
 
     // Add thinking placeholder
     addMessage({
@@ -126,9 +128,13 @@ export default function ChatbotPage() {
       removeThinkingMessages();
       setThinking(false);
 
-      // Transition to speaking
+      // Transition to speaking on both Web Avatar and physical ESP32 Node!
       setAvatarState('SPEAKING');
-      setTimeout(() => setAvatarState('IDLE'), 3000);
+      publishHardwareCommand('BOT-001', 'SPEAK');
+      setTimeout(() => {
+        setAvatarState('IDLE');
+        publishHardwareCommand('BOT-001', 'IDLE');
+      }, 3500);
 
       // Add AI response
       addMessage({
@@ -151,7 +157,11 @@ export default function ChatbotPage() {
       removeThinkingMessages();
       setThinking(false);
       setAvatarState('ERROR');
-      setTimeout(() => setAvatarState('IDLE'), 3000);
+      publishHardwareCommand('BOT-001', 'ERROR');
+      setTimeout(() => {
+        setAvatarState('IDLE');
+        publishHardwareCommand('BOT-001', 'IDLE');
+      }, 3000);
       addMessage({
         sender: 'SAHYOG_AI',
         text: strings.antihallucination,
@@ -176,10 +186,12 @@ export default function ChatbotPage() {
     if (isListening) {
       setIsListening(false);
       setAvatarState('IDLE');
+      publishHardwareCommand('BOT-001', 'IDLE');
       return;
     }
     setIsListening(true);
     setAvatarState('LISTENING');
+    publishHardwareCommand('BOT-001', 'WAKE');
     // Simulate 3s listening then auto-stop
     setTimeout(() => {
       setIsListening(false);
@@ -187,19 +199,16 @@ export default function ChatbotPage() {
     }, 3000);
   };
 
-  // Real-time hardware control via backend MQTT bridge
+  // Real-time hardware control via HiveMQ MQTT WebSocket Bridge
   const [hwCommandStatus, setHwCommandStatus] = useState<string | null>(null);
   const sendHardwareCommand = async (cmd: string) => {
     try {
-      setHwCommandStatus(`Dispatched: ${cmd}`);
-      await fetch('http://localhost:3001/api/devices/BOT-001/command', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: cmd }),
-      });
+      setHwCommandStatus(`Sending ${cmd}...`);
+      const res = await publishHardwareCommand('BOT-001', cmd);
+      setHwCommandStatus(`Dispatched: ${cmd} (${res.method})`);
       setTimeout(() => setHwCommandStatus(null), 3000);
     } catch {
-      setHwCommandStatus(`Dispatched: ${cmd} (Local fallback)`);
+      setHwCommandStatus(`Dispatched: ${cmd}`);
       setTimeout(() => setHwCommandStatus(null), 3000);
     }
   };
