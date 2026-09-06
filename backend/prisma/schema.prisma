@@ -1,0 +1,96 @@
+// This is your Prisma schema file
+// https://www.prisma.io/docs/concepts/components/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model GovernmentSource {
+  id               String              @id @default(uuid())
+  name             String
+  department       String
+  url              String              @unique
+  sourceType       String              @default("WEBSITE")
+  language         String              @default("hi")
+  category         String
+  isVerifiedSource Boolean             @default(false)
+  enabled          Boolean             @default(true)
+  status           String              @default("NEEDS_REVIEW")
+  lastFetched      DateTime?
+  documents        KnowledgeDocument[]
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+}
+
+model KnowledgeDocument {
+  id          String           @id @default(uuid())
+  sourceId    String
+  source      GovernmentSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  title       String
+  documentUrl String
+  fileHash    String?
+  chunks      KnowledgeChunk[]
+  createdAt   DateTime         @default(now())
+}
+
+model KnowledgeChunk {
+  id          String            @id @default(uuid())
+  documentId  String
+  document    KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  content     String
+  pageNumber  Int?
+  department  String
+  officialUrl String
+  isVerified  Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+}
+
+model Device {
+  id              String   @id @default(uuid())
+  deviceId        String   @unique
+  name            String
+  locationLabel   String
+  mqttTopic       String
+  firmwareVersion String   @default("1.2.0")
+  status          String   @default("OFFLINE")
+  currentState    String   @default("IDLE")
+  wifiRssi        Int?
+  lastSeen        DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model ChatConversation {
+  id        String        @id @default(uuid())
+  deviceId  String?
+  language  String        @default("mr")
+  messages  ChatMessage[]
+  createdAt DateTime      @default(now())
+}
+
+model ChatMessage {
+  id             String           @id @default(uuid())
+  conversationId String
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         String
+  text           String
+  isDemo         Boolean          @default(false)
+  sourceMetadata String?
+  createdAt      DateTime         @default(now())
+}
+
+model PrinterJob {
+  id              String   @id @default(uuid())
+  conversationId  String
+  querySummary    String
+  responseSummary String
+  sourceName      String
+  userPhone       String?
+  status          String   @default("SIMULATION_READY")
+  createdAt       DateTime @default(now())
+}

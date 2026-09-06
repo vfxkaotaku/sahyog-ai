@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body, #root {
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  body {
+    font-family: 'Inter', 'Noto Sans Devanagari', system-ui, sans-serif;
+    background-color: #0f172a;
+    color: #f1f5f9;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Devanagari font fallback */
+  :lang(hi), :lang(mr) {
+    font-family: 'Noto Sans Devanagari', 'Inter', sans-serif;
+  }
+}
+
+@layer components {
+  /* Custom scrollbar */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 5px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-radius: 99px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #475569;
+  }
+
+  /* Thermal receipt paper style */
+  .thermal-receipt {
+    font-family: 'JetBrains Mono', 'Courier New', monospace;
+    background: #fff;
+    color: #000;
+    width: 302px;
+    min-height: 200px;
+    padding: 16px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  /* Glass card */
+  .glass-card {
+    background: rgba(30, 41, 59, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Avatar glow effects */
+  .avatar-glow-listening {
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.2), 0 0 30px rgba(16, 185, 129, 0.15);
+  }
+  .avatar-glow-thinking {
+    box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.2), 0 0 30px rgba(251, 191, 36, 0.12);
+  }
+  .avatar-glow-speaking {
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25), 0 0 30px rgba(99, 102, 241, 0.15);
+  }
+  .avatar-glow-camera {
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.25), 0 0 30px rgba(14, 165, 233, 0.15);
+  }
+  .avatar-glow-error {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25), 0 0 30px rgba(239, 68, 68, 0.15);
+  }
+
+  /* Demo badge */
+  .demo-badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold tracking-wider;
+    background: rgba(251, 191, 36, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    animation: shimmer 3s linear infinite;
+    background-size: 200% auto;
+  }
+
+  /* Source card */
+  .source-card {
+    @apply flex items-start gap-3 p-3 rounded-lg mt-3;
+    background: rgba(16, 185, 129, 0.06);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+  }
+
+  /* Message bubble animations */
+  .message-enter {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  /* Camera active indicator */
+  .camera-active-dot {
+    @apply w-2.5 h-2.5 rounded-full bg-red-500;
+    animation: pulseRing 1.2s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  /* Print styles for thermal receipt */
+  @media print {
+    body * { visibility: hidden; }
+    .print-receipt, .print-receipt * { visibility: visible; }
+    .print-receipt {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 58mm;
+      background: white;
+      color: black;
+    }
+    .no-print { display: none !important; }
+  }
+}
