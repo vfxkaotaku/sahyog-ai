@@ -1,0 +1,33 @@
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Logs & Temporary files
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.tempmediaStorage/
+*.mp3
+*.wav
+
+# IDE & Editor configs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
