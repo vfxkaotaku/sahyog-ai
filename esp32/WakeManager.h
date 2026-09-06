@@ -16,12 +16,14 @@ private:
   uint32_t lastTouchTime;
   uint32_t lastActivityTime;
   bool wasTouched;
+  int baselineCap;
+  bool capacitiveEnabled;
 
 public:
-  WakeManager() : lastTouchTime(0), lastActivityTime(0), wasTouched(false) {}
+  WakeManager() : lastTouchTime(0), lastActivityTime(0), wasTouched(false), baselineCap(0), capacitiveEnabled(false) {}
 
   void begin() {
-    pinMode(TOUCH_WAKE_PIN, INPUT);
+    pinMode(TOUCH_WAKE_PIN, INPUT_PULLDOWN);
     pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
     pinMode(STATUS_LED_PIN, OUTPUT);
     pinMode(AUX_LED_PIN, OUTPUT);
@@ -29,26 +31,38 @@ public:
     digitalWrite(STATUS_LED_PIN, LOW);
     digitalWrite(AUX_LED_PIN, LOW);
 
+    // Calibrate baseline capacitance on GPIO 33
+    long sum = 0;
+    for (int i = 0; i < 15; i++) {
+      sum += touchRead(TOUCH_WAKE_PIN);
+      delay(5);
+    }
+    baselineCap = (int)(sum / 15);
+    capacitiveEnabled = (baselineCap >= 45);
+
     lastActivityTime = millis();
-    Serial.printf("[Wake] Capacitive touch pin: GPIO %d, BOOT button: GPIO %d\n",
-                  TOUCH_WAKE_PIN, BOOT_BUTTON_PIN);
+    Serial.printf("[Wake] Capacitive baseline: %d (Capacitive Active: %s), BOOT button: GPIO %d\n",
+                  baselineCap, capacitiveEnabled ? "YES" : "NO (Use TTP223 or BOOT button)", BOOT_BUTTON_PIN);
   }
 
   // Returns true if a valid new wake event was triggered
   bool checkWakeTrigger() {
     uint32_t now = millis();
 
-    // 1. Check TTP223 digital module (HIGH when touched)
-    bool touchDigital = (digitalRead(TOUCH_WAKE_PIN) == HIGH);
-
-    // 2. Check ESP32 built-in capacitive touch sensor on GPIO 33 (drops below ~40 when finger touches)
-    int capVal = touchRead(TOUCH_WAKE_PIN);
-    bool touchCapacitive = (capVal > 0 && capVal < 40);
-
-    // 3. Check physical BOOT button on ESP32 board (active LOW on GPIO 0)
+    // 1. Physical BOOT button on ESP32 (active LOW on GPIO 0)
     bool buttonBoot = (digitalRead(BOOT_BUTTON_PIN) == LOW);
 
-    bool isTriggered = touchDigital || touchCapacitive || buttonBoot;
+    // 2. TTP223 digital touch sensor module (active HIGH)
+    bool touchDigital = (digitalRead(TOUCH_WAKE_PIN) == HIGH);
+
+    // 3. Capacitive wire touch (only if baseline is valid and value drops by > 50%)
+    bool touchCap = false;
+    int capVal = touchRead(TOUCH_WAKE_PIN);
+    if (capacitiveEnabled && capVal > 0 && capVal < (baselineCap / 2)) {
+      touchCap = true;
+    }
+
+    bool isTriggered = buttonBoot || touchDigital || touchCap;
 
     if (isTriggered && !wasTouched && (now - lastTouchTime > TOUCH_DEBOUNCE_MS)) {
       wasTouched = true;

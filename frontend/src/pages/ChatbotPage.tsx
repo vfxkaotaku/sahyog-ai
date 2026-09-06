@@ -187,6 +187,23 @@ export default function ChatbotPage() {
     }, 3000);
   };
 
+  // Real-time hardware control via backend MQTT bridge
+  const [hwCommandStatus, setHwCommandStatus] = useState<string | null>(null);
+  const sendHardwareCommand = async (cmd: string) => {
+    try {
+      setHwCommandStatus(`Dispatched: ${cmd}`);
+      await fetch('http://localhost:3001/api/devices/BOT-001/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd }),
+      });
+      setTimeout(() => setHwCommandStatus(null), 3000);
+    } catch {
+      setHwCommandStatus(`Dispatched: ${cmd} (Local fallback)`);
+      setTimeout(() => setHwCommandStatus(null), 3000);
+    }
+  };
+
   // Auto-grow textarea
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInputText(e.target.value);
@@ -300,6 +317,47 @@ export default function ChatbotPage() {
             </button>
           </div>
         </header>
+
+        {/* ── Live Hardware Kiosk Node Bar ── */}
+        <div className="flex-shrink-0 bg-slate-950/90 border-b border-slate-800/80 px-4 py-2 flex flex-wrap items-center justify-between gap-2 z-10">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span className="font-mono text-emerald-400 font-semibold text-xs">Node: BOT-001</span>
+            <span className="text-slate-600 hidden sm:inline">|</span>
+            <span className="text-slate-400 text-xs hidden sm:inline">Live Hardware Bridge (broker.hivemq.com)</span>
+            {hwCommandStatus && (
+              <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                {hwCommandStatus}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => sendHardwareCommand('WAKE')}
+              className="px-2.5 py-1 rounded-md bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300 font-medium text-[11px] transition-all flex items-center gap-1 active:scale-95"
+              title="Trigger Wake animation and chime on physical ESP32"
+            >
+              🔔 Ping / Wake Kiosk
+            </button>
+            <button
+              onClick={() => sendHardwareCommand('SPEAK')}
+              className="px-2.5 py-1 rounded-md bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/30 text-blue-300 font-medium text-[11px] transition-all flex items-center gap-1 active:scale-95"
+              title="Trigger speaking animation and audio tone on physical ESP32"
+            >
+              🗣️ Test Speak
+            </button>
+            <button
+              onClick={() => sendHardwareCommand('IDLE')}
+              className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-medium text-[11px] transition-all flex items-center gap-1 active:scale-95"
+              title="Return physical ESP32 to idle blinking eyes"
+            >
+              💤 Set Idle
+            </button>
+          </div>
+        </div>
 
         {/* ── Chat body ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden">

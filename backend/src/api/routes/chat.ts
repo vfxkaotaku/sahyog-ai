@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { queryRag } from '../../services/ai/ragService';
 import { db } from '../../db/database';
 import { v4 as uuidv4 } from 'uuid';
+import { publishDeviceCommand } from '../../services/mqtt/mqttBridge';
 
 const router = Router();
 
@@ -17,10 +18,18 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'query is required' });
     }
 
+    // Signal hardware kiosk node in real-time
+    publishDeviceCommand(deviceId, 'THINKING');
+
     // Query RAG engine grounded in synced schemes
     const ragResult = await queryRag(query, language);
     const now = new Date().toISOString();
     const convId = `c-${Date.now().toString().slice(-6)}`;
+
+    // Signal hardware node to speak
+    publishDeviceCommand(deviceId, 'SPEAK', {
+      scheme: ragResult.scheme?.name || 'Rural Assistance',
+    });
 
     // Store in conversations history
     db.conversations.unshift({

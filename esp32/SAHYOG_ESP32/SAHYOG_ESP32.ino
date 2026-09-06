@@ -103,8 +103,8 @@ void setup() {
   delay(1000);
 
   Serial.println("\n========================================================");
-  Serial.println("  SAHYOG AI — ESP32 Rural Assistant Node (SIH)");
-  Serial.println("  Hardware: ESP32 + PAM8403 + INMP441 + OLED + TTP223");
+  Serial.println("  SAHYOG AI — ESP32 Rural Assistant Node (" DEVICE_ID ")");
+  Serial.println("  Hardware: ESP32 + PAM8403 + INMP441 + OLED + Touch");
   Serial.println("========================================================");
 
   // Initialize hardware modules
@@ -112,16 +112,41 @@ void setup() {
   audioMgr.begin();
   oledMgr.begin();
   micMgr.begin();
-  mqttMgr.begin(handleCommand);
+
+  // Try to connect to WiFi & Show live connection status on OLED
+  Serial.println("\n[Network] Initializing WiFi...");
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  bool wifiOk = false;
+  if (String(WIFI_SSID) != "YOUR_WIFI_SSID" && String(WIFI_SSID).length() > 0) {
+    int attempts = 0;
+    while (WiFi.status() != WL_CONNECTED && attempts < 15) {
+      delay(400);
+      attempts++;
+      oledMgr.showWiFiConnecting(WIFI_SSID, attempts);
+      Serial.print(".");
+    }
+    wifiOk = (WiFi.status() == WL_CONNECTED);
+  }
+
+  bool mqttOk = false;
+  if (wifiOk) {
+    Serial.printf("\n[WiFi] CONNECTED! Local IP: %s\n", WiFi.localIP().toString().c_str());
+    mqttMgr.begin(handleCommand);
+    mqttOk = mqttMgr.isConnected();
+  } else {
+    Serial.println("\n[WiFi] Offline mode (SSID not configured in Config.h).");
+  }
+
+  // Display Startup Connection & Web Status on OLED for 3.5 seconds
+  String ipStr = wifiOk ? WiFi.localIP().toString() : "0.0.0.0";
+  oledMgr.showConnectionSummary(WIFI_SSID, ipStr.c_str(), wifiOk, mqttOk);
+  delay(3500);
 
   Serial.println("\n[System] All peripherals initialized. Ready.");
-  Serial.println("  Type commands in Serial Monitor to test:");
-  Serial.println("    'w' : Trigger Wake state");
-  Serial.println("    'l' : Trigger Listening state");
-  Serial.println("    't' : Trigger Thinking state");
-  Serial.println("    's' : Trigger Speaking state");
-  Serial.println("    'i' : Return to Idle state");
-  Serial.println("    '+'/'-' : Volume control (PAM8403)");
+  Serial.println("  Press BOOT button or touch sensor to wake!");
+  Serial.println("  Or interact live via the Web Chatbot!");
   Serial.println("========================================================\n");
 
   changeState(STATE_IDLE);
@@ -153,7 +178,7 @@ void loop() {
   // ─── State Machine ─────────────────────────────────────────────────────────
   switch (currentState) {
     case STATE_IDLE:
-      // Check capacitive touch or BOOT button wake
+      // STRICTLY IDLE: Calm blinking eyes waiting for user touch, BOOT button, or Web command!
       if (wakeMgr.checkWakeTrigger()) {
         changeState(STATE_WAKE);
       }
@@ -161,7 +186,7 @@ void loop() {
 
     case STATE_WAKE:
       // Show greeting face briefly, then transition to listening
-      if (now - stateEntryTime > 1200) {
+      if (now - stateEntryTime > 1500) {
         changeState(STATE_LISTENING);
       }
       break;
@@ -172,13 +197,12 @@ void loop() {
       size_t count = micMgr.readAudioChunk(audioBuf, 128);
       if (count > 0) {
         float energy = micMgr.calculateRMS(audioBuf, count);
-        // Energy can be monitored or streamed
         if (energy > 200.0f) {
           wakeMgr.recordActivity();
         }
       }
 
-      // Record for 4.5 seconds or until silence
+      // Record for 4.5 seconds or until silence, then transition to thinking
       if (now - stateEntryTime > 4500) {
         changeState(STATE_THINKING);
       }
@@ -186,8 +210,6 @@ void loop() {
     }
 
     case STATE_THINKING:
-      // In real system, waiting for cloud/local LLM + RAG response
-      // Demo simulated processing delay
       if (now - stateEntryTime > 2500) {
         changeState(STATE_SPEAKING);
       }
@@ -201,7 +223,7 @@ void loop() {
         audioMgr.playTone(550 + (random(0, 4) * 110), 120);
       }
 
-      // Return to IDLE after speech output completes
+      // Return to IDLE after speech output completes — stays strictly in IDLE!
       if (now - stateEntryTime > 3500) {
         changeState(STATE_IDLE);
       }

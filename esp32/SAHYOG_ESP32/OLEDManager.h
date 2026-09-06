@@ -108,8 +108,6 @@ public:
   void showBootScreen() {
     if (!isInitialized) return;
     display.clearDisplay();
-
-    // Draw boundary box to test display dimensions
     display.drawRect(0, 0, 128, 64, COLOR_WHITE);
 
     display.setTextSize(2);
@@ -121,10 +119,68 @@ public:
     display.setCursor(24, 34);
     display.print("AI Rural Node");
     display.setCursor(18, 48);
-    display.print("System Ready!");
+    display.print("Initializing...");
 
     display.display();
-    delay(1500); // Keep boot screen visible for 1.5s
+    delay(1000);
+  }
+
+  void showWiFiConnecting(const char* ssid, int attempt) {
+    if (!isInitialized) return;
+    display.clearDisplay();
+    display.drawRect(0, 0, 128, 64, COLOR_WHITE);
+
+    display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
+    display.setCursor(14, 8);
+    display.print("CONNECTING WIFI");
+    display.drawLine(0, 18, 128, 18, COLOR_WHITE);
+
+    display.setCursor(8, 24);
+    display.printf("SSID: %.14s", ssid);
+
+    display.setCursor(8, 38);
+    display.print("Status: Trying");
+    for (int i = 0; i < (attempt % 5); i++) display.print(".");
+
+    display.setCursor(8, 50);
+    display.print("Please wait...");
+    display.display();
+  }
+
+  void showConnectionSummary(const char* wifiSsid, const char* ipAddr, bool wifiOk, bool mqttOk) {
+    if (!isInitialized) return;
+    display.clearDisplay();
+    display.drawRect(0, 0, 128, 64, COLOR_WHITE);
+
+    display.setTextSize(1);
+    display.setTextColor(COLOR_WHITE);
+    display.setCursor(8, 6);
+    display.print("SAHYOG AI : " DEVICE_ID);
+    display.drawLine(0, 17, 128, 17, COLOR_WHITE);
+
+    display.setCursor(8, 21);
+    if (wifiOk) {
+      display.printf("WiFi: CONNECTED\n");
+      display.setCursor(8, 31);
+      display.printf("IP: %s\n", ipAddr);
+    } else {
+      display.printf("WiFi: OFFLINE\n");
+      display.setCursor(8, 31);
+      display.print("Check Config.h SSID");
+    }
+
+    display.setCursor(8, 43);
+    if (mqttOk) {
+      display.print("Cloud: LIVE SYNC OK");
+    } else {
+      display.print("Cloud: OFFLINE MODE");
+    }
+
+    display.setCursor(8, 53);
+    display.print("Touch/BOOT: Talk");
+
+    display.display();
   }
 
   void updateAnimation(DeviceState state) {

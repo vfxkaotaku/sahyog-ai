@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { db, DeviceRow } from '../../db/database';
 import { v4 as uuidv4 } from 'uuid';
+import { publishDeviceCommand } from '../../services/mqtt/mqttBridge';
 
 const router = Router();
 
@@ -159,6 +160,9 @@ router.post('/:id/command', (req, res) => {
   const { command, payload } = req.body;
   console.log(`[Command] Sent to ${device.deviceId} via ${device.mqttTopic}/command: ${command}`, payload);
 
+  // Publish to real-time MQTT broker for hardware ESP32 node
+  publishDeviceCommand(device.deviceId, command, payload);
+
   db.deviceLogs.unshift({
     id: uuidv4(),
     timestamp: new Date().toISOString(),
@@ -172,7 +176,7 @@ router.post('/:id/command', (req, res) => {
     deviceId: device.deviceId,
     command,
     topic: `${device.mqttTopic}/command`,
-    note: 'Command routed successfully',
+    note: 'Command routed to hardware via MQTT broker',
   });
 });
 
