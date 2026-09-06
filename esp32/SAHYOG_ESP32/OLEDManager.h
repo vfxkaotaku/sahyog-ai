@@ -62,7 +62,13 @@ public:
 
     isInitialized = true;
     Serial.printf("[OLED] SSD1306 Display ACTIVE at 0x%02X (128x64)!\n\n", foundAddr);
+    Wire.setClock(100000); // 100kHz safe clock speed eliminates breadboard wire noise
+    
+    // Clear initial hardware GDDRAM noise
     display.clearDisplay();
+    display.display();
+    delay(50);
+    
     display.setTextColor(SSD1306_WHITE);
     display.dim(false); // Ensure maximum brightness
     showBootScreen();
@@ -72,15 +78,23 @@ public:
   void showBootScreen() {
     if (!isInitialized) return;
     display.clearDisplay();
+    
+    // Draw boundary box to test display dimensions
+    display.drawRect(0, 0, 128, 64, SSD1306_WHITE);
+    
     display.setTextSize(2);
-    display.setCursor(14, 10);
+    display.setTextColor(SSD1306_WHITE);
+    display.setCursor(18, 12);
     display.print("SAHYOG");
+    
     display.setTextSize(1);
-    display.setCursor(20, 32);
+    display.setCursor(24, 34);
     display.print("AI Rural Node");
-    display.setCursor(12, 48);
-    display.print("v" FIRMWARE_VERSION " Initializing...");
+    display.setCursor(18, 48);
+    display.print("System Ready!");
+    
     display.display();
+    delay(1500); // Keep boot screen visible for 1.5s
   }
 
   void updateAnimation(DeviceState state) {
