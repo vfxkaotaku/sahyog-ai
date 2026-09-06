@@ -1,21 +1,20 @@
 """
 generate_audio.py
 =================
-Generates dual speech phrases for SAHYOG AI ESP32:
-  1. Wake Phrase   : "Hello Rishi, main hoon aap ki AI agent"
-  2. Answer Phrase : "आपका उत्तर तैयार है" (Aapka uttar taiyar hai)
+Generates the complete multi-scheme voice library for SAHYOG AI ESP32:
+  1. Wake Greeting  : "Hello Rishi, main hoon aap ki AI agent"
+  2. Listening Prompt: "जी बोलिए, मैं सुन रही हूँ" (Ji boliye, main sun rahi hoon)
+  3. General Answer : "आपका उत्तर तैयार है" (Aapka uttar taiyar hai)
+  4. PM-KISAN Scheme: "पीएम किसान में सालाना छह हज़ार रुपये मिलते हैं"
+  5. PMFBY Insurance: "फसल बीमा योजना में नुकसान का मुआवज़ा मिलता है"
+  6. KCC Credit Card: "किसान क्रेडिट कार्ड पर कम ब्याज पर ऋण मिलता है"
 
-Exports:
-  - audio_data.h  -> C header with PROGMEM byte arrays (16kHz High Quality)
-  - data/wake.wav, data/answer.wav -> Standard 16kHz WAV files
-
-Uses gTTS for voice generation and miniaudio for clean 16kHz resampling.
+Uses gTTS for voice generation and miniaudio for clean 11025 Hz resampling.
 """
 
 import os
 import sys
 import wave
-import shutil
 
 try:
     from gtts import gTTS
@@ -33,13 +32,19 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "miniaudio"])
     import miniaudio
 
-SAMPLE_RATE = 16000
-WAKE_TEXT = "Hello Rishi, main hoon aap ki AI agent"
-ANSWER_TEXT = "आपका उत्तर तैयार है"
+SAMPLE_RATE = 11025
 WAV_DIR = "data"
 
+CLIPS = [
+    ("audio_wake",    "WAKE",    "Hello Rishi, main hoon aap ki AI agent", "hi"),
+    ("audio_listen",  "LISTEN",  "जी बोलिए, मैं सुन रही हूँ",                "hi"),
+    ("audio_answer",  "ANSWER",  "आपका उत्तर तैयार है",                      "hi"),
+    ("audio_pmkisan", "PMKISAN", "पीएम किसान में सालाना छह हज़ार रुपये मिलते हैं", "hi"),
+    ("audio_pmfby",   "PMFBY",   "फसल बीमा योजना में नुकसान का मुआवज़ा मिलता है", "hi"),
+    ("audio_kcc",     "KCC",     "किसान क्रेडिट कार्ड पर कम ब्याज पर ऋण मिलता है", "hi"),
+]
+
 def text_to_pcm(text, lang="hi", temp_name="temp.mp3"):
-    print(f"  Generating TTS for language: {lang}...")
     tts = gTTS(text=text, lang=lang, slow=False)
     tts.save(temp_name)
 
@@ -48,11 +53,10 @@ def text_to_pcm(text, lang="hi", temp_name="temp.mp3"):
     if os.path.exists(temp_name):
         os.remove(temp_name)
 
-    # Normalize to 80% peak amplitude to avoid clipping
+    # Normalize to 82% peak amplitude
     max_amp = max(abs(s) for s in samples) if samples else 1
-    scale = (32767.0 * 0.80) / max_amp if max_amp > 0 else 1.0
+    scale = (32767.0 * 0.82) / max_amp if max_amp > 0 else 1.0
 
-    # Convert 16-bit signed (-32768..32767) to 8-bit unsigned (0..255)
     raw_8bit = bytearray()
     for s in samples:
         scaled = s * scale
@@ -60,8 +64,6 @@ def text_to_pcm(text, lang="hi", temp_name="temp.mp3"):
         val = max(0, min(255, val))
         raw_8bit.append(val)
 
-    duration = len(raw_8bit) / float(SAMPLE_RATE)
-    print(f"  -> Generated {len(raw_8bit)} samples ({duration:.2f}s)")
     return raw_8bit
 
 def format_hex_array(data, name):
@@ -81,33 +83,45 @@ def main():
         sys.stdout.reconfigure(encoding='utf-8')
     except Exception:
         pass
-    print("=" * 60)
-    print("  SAHYOG AI - ESP32 Dual Audio Generator (16 kHz)")
-    print(f"  1. Wake Phrase   : {WAKE_TEXT}")
-    print("  2. Answer Phrase : Aapka uttar taiyar hai (Hindi)")
-    print("=" * 60)
 
-    wake_pcm = text_to_pcm(WAKE_TEXT, "hi", "temp_wake.mp3")
-    answer_pcm = text_to_pcm(ANSWER_TEXT, "hi", "temp_answer.mp3")
+    print("=" * 65)
+    print("  SAHYOG AI — ESP32 Multi-Phrase Speech Generator (11025 Hz)")
+    print("=" * 65)
+
+    generated = []
+    total_samples = 0
+
+    for var_name, key, text, lang in CLIPS:
+        print(f"  Generating [{key:7}]: {text}")
+        pcm = text_to_pcm(text, lang, f"temp_{key}.mp3")
+        dur = len(pcm) / float(SAMPLE_RATE)
+        print(f"    -> {len(pcm)} samples ({dur:.2f}s)")
+        generated.append((var_name, key, pcm, len(pcm), text))
+        total_samples += len(pcm)
 
     header_content = []
     header_content.append("// ============================================================\n")
-    header_content.append("//  Auto-generated 16kHz Audio Data Header for SAHYOG AI ESP32\n")
-    header_content.append(f"//  Wake Phrase   : \"{WAKE_TEXT}\"\n")
-    header_content.append(f"//  Answer Phrase : \"{ANSWER_TEXT}\"\n")
-    header_content.append(f"//  Sample Rate   : {SAMPLE_RATE} Hz, 8-bit unsigned mono PCM\n")
+    header_content.append("//  Auto-generated 11025 Hz Multi-Scheme Audio Data for SAHYOG AI\n")
+    header_content.append("//  Total Audio Size: {:.1f} KB in PROGMEM\n".format(total_samples / 1024.0))
     header_content.append("// ============================================================\n\n")
     header_content.append("#pragma once\n")
     header_content.append("#include <Arduino.h>\n\n")
-    header_content.append(f"#define AUDIO_SAMPLE_RATE      {SAMPLE_RATE}\n")
-    header_content.append(f"#define WAKE_SAMPLE_COUNT      {len(wake_pcm)}\n")
-    header_content.append(f"#define ANSWER_SAMPLE_COUNT    {len(answer_pcm)}\n\n")
-    header_content.append(f"// Legacy alias compatibility\n")
-    header_content.append(f"#define AUDIO_SAMPLE_COUNT     WAKE_SAMPLE_COUNT\n\n")
+    header_content.append(f"#define AUDIO_SAMPLE_RATE      {SAMPLE_RATE}\n\n")
 
-    header_content.append(format_hex_array(wake_pcm, "audio_wake"))
-    header_content.append(format_hex_array(answer_pcm, "audio_answer"))
-    header_content.append("// Legacy pointer alias\n")
+    for var_name, key, pcm, count, text in generated:
+        header_content.append(f"// [{key}] \"{text}\"\n")
+        header_content.append(f"#define {key}_SAMPLE_COUNT     {count}\n")
+    header_content.append("\n")
+
+    # Legacy compatibility aliases
+    header_content.append("// Legacy aliases\n")
+    header_content.append("#define AUDIO_SAMPLE_COUNT     WAKE_SAMPLE_COUNT\n\n")
+
+    for var_name, key, pcm, count, text in generated:
+        header_content.append(f"// Phrase: {text}\n")
+        header_content.append(format_hex_array(pcm, var_name))
+
+    header_content.append("// Backward-compatible pointer alias\n")
     header_content.append("#define audio_data audio_wake\n")
 
     full_header = "".join(header_content)
@@ -125,23 +139,20 @@ def main():
         sz = os.path.getsize(t) / 1024.0
         print(f"  [SAVED] {t} ({sz:.1f} KB)")
 
-    # Save WAV files
-    os.makedirs(WAKE_TEXT and WAV_DIR, exist_ok=True)
-    with wave.open(os.path.join(WAV_DIR, "wake.wav"), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(1)
-        wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(wake_pcm)
+    # Save individual WAV files for testing
+    os.makedirs(WAV_DIR, exist_ok=True)
+    for var_name, key, pcm, count, text in generated:
+        wav_path = os.path.join(WAV_DIR, f"{key.lower()}.wav")
+        with wave.open(wav_path, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(1)
+            wf.setframerate(SAMPLE_RATE)
+            wf.writeframes(pcm)
 
-    with wave.open(os.path.join(WAV_DIR, "answer.wav"), "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(1)
-        wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(answer_pcm)
-
-    print("\n" + "=" * 60)
-    print("  SUCCESS! Dual audio generated and synchronized to all targets.")
-    print("=" * 60)
+    print("\n" + "=" * 65)
+    print("  SUCCESS! Full multi-scheme voice library generated.")
+    print(f"  Total audio footprint: {total_samples/1024.0:.1f} KB")
+    print("=" * 65)
 
 if __name__ == "__main__":
     main()

@@ -44,7 +44,7 @@ export default function ChatbotPage() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [inputText, setInputText] = useState('');
-  const [voiceAudioEnabled, setVoiceAudioEnabled] = useState(true);
+  const [voiceAudioEnabled, setVoiceAudioEnabled] = useState(false); // Website muted by default — voice routes to ESP32 speaker!
   const [isListening, setIsListening] = useState(false);
   const [listenTranscript, setListenTranscript] = useState('');
   const [listenError, setListenError] = useState<string | null>(null);
@@ -138,10 +138,25 @@ export default function ChatbotPage() {
       setAvatarState('SPEAKING');
       const schemeTitle = response.sources?.[0]?.documentTitle || response.sources?.[0]?.department || (language === 'mr' ? 'सहयोग AI' : language === 'hi' ? 'सहयोग AI' : 'SAHYOG AI');
       const cleanSummary = response.answer.replace(/[#*`_\[\]()]/g, '').substring(0, 95);
+
+      // Detect specific scheme voice clip for ESP32 hardware speaker
+      let clip = 'ANSWER';
+      const fullText = (query + ' ' + response.answer + ' ' + schemeTitle).toLowerCase();
+      if (fullText.includes('kisan') || fullText.includes('samman') || fullText.includes('6000')) {
+        clip = 'PM_KISAN';
+      } else if (fullText.includes('fasal') || fullText.includes('bima') || fullText.includes('pmfby') || fullText.includes('insurance')) {
+        clip = 'PMFBY';
+      } else if (fullText.includes('kcc') || fullText.includes('credit card') || fullText.includes('loan') || fullText.includes('rin')) {
+        clip = 'KCC';
+      }
+
+      // Route speech directly to physical ESP32 PAM8403 hardware speaker!
       publishHardwareCommand('BOT-001', 'SPEAK', {
+        clip,
         title: schemeTitle,
         text: cleanSummary,
       });
+
       setTimeout(() => {
         setAvatarState('IDLE');
         publishHardwareCommand('BOT-001', 'IDLE');
@@ -418,22 +433,22 @@ export default function ChatbotPage() {
               ))}
             </div>
 
-            {/* Voice Audio Toggle */}
+            {/* Voice Audio Route: ESP32 Hardware Speaker vs Web */}
             <button
               onClick={() => {
                 const next = !voiceAudioEnabled;
                 setVoiceAudioEnabled(next);
                 if (!next) stopSpeaking();
               }}
-              title={voiceAudioEnabled ? 'Voice output enabled (Click to mute)' : 'Voice output muted (Click to unmute)'}
-              className={`p-2 rounded-xl border transition-all flex items-center gap-1 text-xs font-semibold ${
-                voiceAudioEnabled
+              title={voiceAudioEnabled ? 'Web audio also enabled. Click to mute web audio.' : 'Website muted — Voice speaks directly from ESP32 PAM8403 hardware speaker.'}
+              className={`p-2 rounded-xl border transition-all flex items-center gap-1.5 text-xs font-semibold ${
+                !voiceAudioEnabled
                   ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25'
-                  : 'bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-200'
+                  : 'bg-amber-500/15 border-amber-500/30 text-amber-300 hover:bg-amber-500/25'
               }`}
             >
-              {voiceAudioEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
-              <span className="hidden sm:inline">{voiceAudioEnabled ? 'Voice' : 'Mute'}</span>
+              <Volume2 className="w-4 h-4 text-emerald-400" />
+              <span className="hidden sm:inline">{!voiceAudioEnabled ? 'ESP32 Speaker' : 'Web+ESP32'}</span>
             </button>
 
             {/* Gemini AI Status Badge */}

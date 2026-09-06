@@ -32,6 +32,7 @@ MQTTManager  mqttMgr;
 // ─── System State ─────────────────────────────────────────────────────────────
 DeviceState currentState = STATE_IDLE;
 uint32_t stateEntryTime = 0;
+String activeClip = "ANSWER";
 
 void changeState(DeviceState newState) {
   if (currentState == newState) return;
@@ -52,12 +53,12 @@ void changeState(DeviceState newState) {
 
     case STATE_WAKE:
       wakeMgr.setStatusLed(true);
-      audioMgr.playWakeSpeech(); // Speaks greeting: "Hello Rishi, main hoon aap ki AI agent"
+      audioMgr.playWakeSpeech(); // Speaks: "Hello Rishi, main hoon aap ki AI agent"
       break;
 
     case STATE_LISTENING:
       wakeMgr.setStatusLed(true);
-      audioMgr.playListeningCue();
+      audioMgr.playClip("LISTEN"); // Speaks: "जी बोलिए, मैं सुन रही हूँ"
       micMgr.startRecording();
       break;
 
@@ -69,7 +70,8 @@ void changeState(DeviceState newState) {
 
     case STATE_SPEAKING:
       wakeMgr.setStatusLed(true);
-      audioMgr.playAnswerSpeech(); // Speaks: "Aapka uttar taiyar hai" + prompt chime (never the greeting!)
+      // Play scheme voice directly through the ESP32 PAM8403 physical speaker!
+      audioMgr.playClip(activeClip);
       break;
 
     case STATE_ERROR:
@@ -89,13 +91,15 @@ void handleCommand(const char* topic, const char* payload) {
   String cmdStr = p;
   String titleStr = "SAHYOG AI";
   String textStr = "";
+  String clipStr = "ANSWER";
 
-  // Check if JSON payload (e.g. {"command":"SPEAK","title":"PM-KISAN","text":"..."})
+  // Check if JSON payload (e.g. {"command":"SPEAK","clip":"PM_KISAN","title":"...","text":"..."})
   if (p.startsWith("{")) {
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, p);
     if (!error) {
       if (doc["command"].is<const char*>()) cmdStr = String(doc["command"].as<const char*>());
+      if (doc["clip"].is<const char*>())    clipStr = String(doc["clip"].as<const char*>());
       if (doc["title"].is<const char*>())   titleStr = String(doc["title"].as<const char*>());
       if (doc["text"].is<const char*>())    textStr = String(doc["text"].as<const char*>());
     }
@@ -106,6 +110,7 @@ void handleCommand(const char* topic, const char* payload) {
   if (cmdStr.indexOf("WAKE") >= 0) {
     changeState(STATE_WAKE);
   } else if (cmdStr.indexOf("SPEAK") >= 0) {
+    activeClip = clipStr;
     if (textStr.length() > 0 || titleStr.length() > 0) {
       oledMgr.setAnswerContent(titleStr.c_str(), textStr.c_str());
     }
@@ -115,6 +120,7 @@ void handleCommand(const char* topic, const char* payload) {
   } else if (cmdStr.indexOf("LISTEN") >= 0) {
     changeState(STATE_LISTENING);
   } else if (cmdStr.indexOf("IDLE") >= 0) {
+    activeClip = "ANSWER";
     oledMgr.clearAnswerContent();
     changeState(STATE_IDLE);
   } else if (p.indexOf("vol+") >= 0) {
